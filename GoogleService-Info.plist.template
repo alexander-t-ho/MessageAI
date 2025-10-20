@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>YOUR_CLIENT_ID_HERE.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.YOUR_REVERSED_CLIENT_ID_HERE</string>
+	<key>API_KEY</key>
+	<string>YOUR_API_KEY_HERE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>YOUR_SENDER_ID_HERE</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.yourname.MessageAI</string>
+	<key>PROJECT_ID</key>
+	<string>messageai-xxxxx</string>
+	<key>STORAGE_BUCKET</key>
+	<string>messageai-xxxxx.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:YOUR_APP_ID_HERE:ios:YOUR_IOS_APP_ID_HERE</string>
+</dict>
+</plist>
+
+<!-- 
+INSTRUCTIONS:
+1. Go to Firebase Console (https://console.firebase.google.com)
+2. Select your MessageAI project
+3. Go to Project Settings (gear icon)
+4. Scroll down to "Your apps"
+5. Click on your iOS app
+6. Click "Download GoogleService-Info.plist"
+7. Replace this template file with the downloaded file
+8. DO NOT commit the actual GoogleService-Info.plist to Git (it's in .gitignore)
+
+This template is for reference only. You MUST download the actual file from Firebase.
+-->
+
