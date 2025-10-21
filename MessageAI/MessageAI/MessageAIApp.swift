@@ -30,7 +30,27 @@ struct MessageAIApp: App {
                 configurations: [modelConfiguration]
             )
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // If migration fails during development, try to recreate container
+            print("⚠️ ModelContainer creation failed: \(error)")
+            print("🔄 Attempting to recreate database...")
+            
+            // Delete old database files
+            let url = modelConfiguration.url
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: url.deletingPathExtension().appendingPathExtension("sqlite-shm"))
+            try? FileManager.default.removeItem(at: url.deletingPathExtension().appendingPathExtension("sqlite-wal"))
+            
+            // Try creating container again
+            do {
+                let newContainer = try ModelContainer(
+                    for: schema,
+                    configurations: [modelConfiguration]
+                )
+                print("✅ Database recreated successfully!")
+                return newContainer
+            } catch {
+                fatalError("❌ Could not create ModelContainer even after cleanup: \(error)")
+            }
         }
     }()
     
