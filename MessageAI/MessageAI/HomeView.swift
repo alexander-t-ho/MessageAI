@@ -2,143 +2,162 @@
 //  HomeView.swift
 //  MessageAI
 //
-//  Main home screen after login
+//  Main home screen with tab navigation
 //
 
 import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var selectedTab = 0
+    
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            // Messages Tab
+            ConversationListView()
+                .tabItem {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("Messages")
+                }
+                .tag(0)
+            
+            // Profile Tab
+            ProfileView()
+                .tabItem {
+                    Image(systemName: "person.fill")
+                    Text("Profile")
+                }
+                .tag(1)
+        }
+    }
+}
+
+// MARK: - Profile View
+
+struct ProfileView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showDatabaseTest = false
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background gradient
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
-                VStack(spacing: 30) {
-                    Spacer()
-                    
-                    // Welcome message
-                    VStack(spacing: 15) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 80))
-                            .foregroundColor(.green)
-                        
-                        Text("Welcome!")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                        
-                        if let user = authViewModel.currentUser {
-                            Text("Hello, \(user.name)! 👋")
-                                .font(.title2)
-                                .foregroundColor(.gray)
+        NavigationStack {
+            List {
+                // User Info Section
+                Section {
+                    if let user = authViewModel.currentUser {
+                        HStack {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 60, height: 60)
+                                .overlay(
+                                    Text(user.name.prefix(1).uppercased())
+                                        .font(.title)
+                                        .foregroundColor(.white)
+                                )
                             
-                            VStack(spacing: 5) {
-                                Text("Email: \(user.email)")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(user.name)
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                
+                                Text(user.email)
                                     .font(.subheadline)
                                     .foregroundColor(.gray)
-                                Text("User ID: \(user.id)")
-                                    .font(.caption)
-                                    .foregroundColor(.gray.opacity(0.7))
                             }
-                            .padding(.top, 10)
+                            .padding(.leading, 8)
                         }
+                        .padding(.vertical, 8)
                     }
-                    
-                    // Phase 1 Complete badge
-                    VStack(spacing: 10) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.yellow)
-                        
-                        Text("🎉 Phase 1 Complete! 🎉")
-                            .font(.headline)
-                        
-                        Text("Authentication Working!")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                    .padding()
-                    .background(Color.white)
-                    .cornerRadius(15)
-                    .shadow(radius: 5)
-                    .padding(.horizontal, 40)
-                    
-                    // Info card
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "info.circle.fill")
-                                .foregroundColor(.blue)
-                            Text("What's Next?")
-                                .font(.headline)
-                        }
-                        
-                        Text("✅ User registration")
-                        Text("✅ User login")
-                        Text("✅ Session management")
-                        Text("🔨 Phase 2: Local Data Persistence")
-                        Text("⏳ Phase 3: Messaging")
-                        
-                    }
-                    .font(.subheadline)
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.9))
-                    .cornerRadius(15)
-                    .shadow(radius: 5)
-                    .padding(.horizontal, 40)
-                    
-                    // Database Test Button
-                    Button(action: {
-                        showDatabaseTest = true
-                    }) {
+                } header: {
+                    Text("Account")
+                }
+                
+                // Phase Progress Section
+                Section {
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Authentication", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Local Database", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Draft Messages", status: .complete, color: .green)
+                    ProgressRow(icon: "hammer.circle.fill", text: "One-on-One Messaging", status: .inProgress, color: .blue)
+                    ProgressRow(icon: "circle", text: "Real-Time Updates", status: .pending, color: .gray)
+                    ProgressRow(icon: "circle", text: "Offline Support", status: .pending, color: .gray)
+                } header: {
+                    Text("Development Progress")
+                }
+                
+                // Developer Tools Section
+                Section {
+                    Button(action: { showDatabaseTest = true }) {
                         HStack {
                             Image(systemName: "cylinder.fill")
-                            Text("Test Database")
+                                .foregroundColor(.purple)
+                            Text("Database Test")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
                         }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.purple)
-                        .cornerRadius(10)
-                        .shadow(radius: 3)
                     }
-                    .padding(.horizontal, 40)
-                    
-                    Spacer()
-                    
-                    // Logout button
-                    Button(action: {
-                        authViewModel.logout()
-                    }) {
+                } header: {
+                    Text("Developer Tools")
+                }
+                
+                // Logout Section
+                Section {
+                    Button(action: { authViewModel.logout() }) {
                         HStack {
                             Image(systemName: "arrow.right.square")
                             Text("Logout")
                         }
-                        .font(.headline)
                         .foregroundColor(.red)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                        .shadow(radius: 3)
                     }
-                    .padding(.horizontal, 40)
-                    .padding(.bottom, 30)
                 }
             }
-            .navigationTitle("MessageAI")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Profile")
             .sheet(isPresented: $showDatabaseTest) {
                 DatabaseTestView()
+            }
+        }
+    }
+}
+
+// MARK: - Progress Row
+
+struct ProgressRow: View {
+    let icon: String
+    let text: String
+    let status: Status
+    let color: Color
+    
+    enum Status {
+        case complete
+        case inProgress
+        case pending
+    }
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(.title3)
+            
+            Text(text)
+            
+            Spacer()
+            
+            switch status {
+            case .complete:
+                Text("Complete")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.green)
+            case .inProgress:
+                Text("In Progress")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.blue)
+            case .pending:
+                Text("Pending")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
         }
     }
