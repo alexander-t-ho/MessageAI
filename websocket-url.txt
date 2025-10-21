@@ -1,0 +1,1 @@
+wss://bnbr75tld0.execute-api.us-east-1.amazonaws.com/production
