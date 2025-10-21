@@ -21,6 +21,11 @@ final class MessageData {
     var isRead: Bool
     var isSentByCurrentUser: Bool
     
+    // Reply feature
+    var replyToMessageId: String? // ID of message being replied to
+    var replyToContent: String? // Preview of message being replied to
+    var replyToSenderName: String? // Name of person who sent the original message
+    
     init(
         id: String = UUID().uuidString,
         conversationId: String,
@@ -30,7 +35,10 @@ final class MessageData {
         timestamp: Date = Date(),
         status: String = "sending",
         isRead: Bool = false,
-        isSentByCurrentUser: Bool
+        isSentByCurrentUser: Bool,
+        replyToMessageId: String? = nil,
+        replyToContent: String? = nil,
+        replyToSenderName: String? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -41,6 +49,9 @@ final class MessageData {
         self.status = status
         self.isRead = isRead
         self.isSentByCurrentUser = isSentByCurrentUser
+        self.replyToMessageId = replyToMessageId
+        self.replyToContent = replyToContent
+        self.replyToSenderName = replyToSenderName
     }
 }
 

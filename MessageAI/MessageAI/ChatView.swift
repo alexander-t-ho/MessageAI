@@ -15,6 +15,7 @@ struct ChatView: View {
     @Query private var allMessages: [MessageData]
     @State private var messageText = ""
     @State private var isLoading = false
+    @State private var replyingToMessage: MessageData? // Message being replied to
     @FocusState private var isInputFocused: Bool
     
     private var databaseService: DatabaseService {
@@ -35,8 +36,12 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
+                            MessageBubble(
+                                message: message,
+                                onReply: { replyToMessage(message) },
+                                onTapReply: { scrollToMessage($0, proxy: proxy) }
+                            )
+                            .id(message.id)
                         }
                     }
                     .padding()
@@ -60,6 +65,14 @@ struct ChatView: View {
                     // Load draft
                     loadDraft()
                 }
+            }
+            
+            // Reply banner (shown when replying to a message)
+            if let replyMessage = replyingToMessage {
+                ReplyBanner(
+                    message: replyMessage,
+                    onCancel: { cancelReply() }
+                )
             }
             
             // Input bar
@@ -143,7 +156,10 @@ struct ChatView: View {
             content: text,
             timestamp: Date(),
             status: "sending",
-            isSentByCurrentUser: true
+            isSentByCurrentUser: true,
+            replyToMessageId: replyingToMessage?.id,
+            replyToContent: replyingToMessage?.content,
+            replyToSenderName: replyingToMessage?.senderName
         )
         
         do {
@@ -155,8 +171,9 @@ struct ChatView: View {
             conversation.lastMessageTime = Date()
             try modelContext.save()
             
-            // Clear input and draft
+            // Clear input, draft, and reply state
             messageText = ""
+            replyingToMessage = nil
             try databaseService.deleteDraft(for: conversation.id)
             
             // TODO: Phase 3 - Send to server
@@ -176,12 +193,35 @@ struct ChatView: View {
             isLoading = false
         }
     }
+    
+    private func replyToMessage(_ message: MessageData) {
+        replyingToMessage = message
+        isInputFocused = true // Focus text field
+    }
+    
+    private func cancelReply() {
+        withAnimation {
+            replyingToMessage = nil
+        }
+    }
+    
+    private func scrollToMessage(_ messageId: String, proxy: ScrollViewProxy) {
+        withAnimation {
+            proxy.scrollTo(messageId, anchor: .center)
+        }
+        
+        // TODO: Could add a highlight animation here
+    }
 }
 
 // MARK: - Message Bubble
 
 struct MessageBubble: View {
     let message: MessageData
+    let onReply: () -> Void
+    let onTapReply: (String) -> Void
+    
+    @State private var swipeOffset: CGFloat = 0
     
     var body: some View {
         HStack {
@@ -190,6 +230,38 @@ struct MessageBubble: View {
             }
             
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
+                // Reply context (if this message is a reply)
+                if let replyToContent = message.replyToContent,
+                   let replyToSenderName = message.replyToSenderName,
+                   let replyToId = message.replyToMessageId {
+                    Button(action: { onTapReply(replyToId) }) {
+                        HStack(spacing: 6) {
+                            Rectangle()
+                                .fill(isFromCurrentUser ? Color.white.opacity(0.6) : Color.blue)
+                                .frame(width: 3)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(replyToSenderName)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(isFromCurrentUser ? .white.opacity(0.9) : .blue)
+                                
+                                Text(replyToContent)
+                                    .font(.caption)
+                                    .foregroundColor(isFromCurrentUser ? .white.opacity(0.7) : .gray)
+                                    .lineLimit(2)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(isFromCurrentUser ? Color.white.opacity(0.2) : Color.gray.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
                 // Message content
                 Text(message.content)
                     .padding(.horizontal, 16)
@@ -209,6 +281,27 @@ struct MessageBubble: View {
                     }
                 }
             }
+            .offset(x: swipeOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        // Only allow swiping left (negative translation)
+                        let translation = value.translation.width
+                        if translation < 0 {
+                            swipeOffset = max(translation, -60)
+                        }
+                    }
+                    .onEnded { value in
+                        if swipeOffset < -30 {
+                            // Trigger reply
+                            onReply()
+                        }
+                        // Animate back to original position
+                        withAnimation(.spring()) {
+                            swipeOffset = 0
+                        }
+                    }
+            )
             
             if !isFromCurrentUser {
                 Spacer(minLength: 60)
@@ -263,6 +356,48 @@ struct MessageBubble: View {
             formatter.timeStyle = .short
             return formatter.string(from: date)
         }
+    }
+}
+
+// MARK: - Reply Banner
+
+struct ReplyBanner: View {
+    let message: MessageData
+    let onCancel: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Vertical accent bar
+            Rectangle()
+                .fill(Color.blue)
+                .frame(width: 3)
+            
+            // Reply content
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Replying to \(message.senderName)")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.blue)
+                
+                Text(message.content)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            // Cancel button
+            Button(action: onCancel) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 
