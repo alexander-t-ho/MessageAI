@@ -25,10 +25,10 @@ struct ChatView: View {
         DatabaseService(modelContext: modelContext)
     }
     
-    // Filter messages for this conversation
+    // Filter messages for this conversation (exclude deleted messages)
     private var messages: [MessageData] {
         allMessages
-            .filter { $0.conversationId == conversation.id }
+            .filter { $0.conversationId == conversation.id && !$0.isDeleted }
             .sorted { $0.timestamp < $1.timestamp }
     }
     
@@ -241,31 +241,27 @@ struct ChatView: View {
         print("   Status: \(message.status)")
         print("   Already deleted: \(message.isDeleted)")
         
-        // If message is still sending, delete completely
+        // If message is still sending, delete completely from database
         if message.status == "sending" {
             print("   → Deleting completely (sending status)")
             modelContext.delete(message)
             
             do {
                 try modelContext.save()
-                print("   ✅ Message deleted successfully from database")
+                print("   ✅ Message deleted successfully - removed from database")
             } catch {
                 print("   ❌ Error deleting message: \(error)")
             }
         } else {
-            // For sent/delivered/read messages, mark as deleted
-            print("   → Marking as deleted (sent/delivered/read status)")
+            // For sent/delivered/read messages: Keep in database but hide from both users
+            print("   → Marking as deleted (soft delete - kept in database but hidden from UI)")
             
-            // IMPORTANT: Modify the object to trigger SwiftData change
+            // Mark as deleted - message stays in database but won't be displayed
             message.isDeleted = true
-            
-            // Also clear the content to force UI update
-            let originalContent = message.content
-            message.content = originalContent // Force update
             
             do {
                 try modelContext.save()
-                print("   ✅ Message marked as deleted in database")
+                print("   ✅ Message hidden from both users (still in database)")
                 print("   ✅ isDeleted = \(message.isDeleted)")
             } catch {
                 print("   ❌ Error marking message as deleted: \(error)")
@@ -372,17 +368,7 @@ struct MessageBubble: View {
                 }
                 
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                // If message is deleted, show placeholder
-                if message.isDeleted {
-                    Text("Message Deleted")
-                        .italic()
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background((isFromCurrentUser ? Color.blue : Color(.systemGray5)).opacity(0.3))
-                        .foregroundColor(.gray)
-                        .cornerRadius(20)
-                } else {
-                    // Reply context (if this message is a reply)
+                // Reply context (if this message is a reply)
                     if let replyToContent = message.replyToContent,
                        let replyToSenderName = message.replyToSenderName,
                        let replyToId = message.replyToMessageId {
@@ -433,7 +419,6 @@ struct MessageBubble: View {
                                 .offset(x: 8, y: -8)
                         }
                     }
-                }
                 
                 // Timestamp and status
                 HStack(spacing: 4) {
@@ -441,7 +426,7 @@ struct MessageBubble: View {
                         .font(.caption2)
                         .foregroundColor(.gray)
                     
-                    if isFromCurrentUser && !message.isDeleted {
+                    if isFromCurrentUser {
                         statusIcon
                     }
                 }
@@ -472,27 +457,25 @@ struct MessageBubble: View {
             )
             .animation(.easeInOut(duration: 0.2), value: swipeOffset)
             .contextMenu {
-                if !message.isDeleted {
-                    Button(action: onEmphasize) {
-                        Label(
-                            message.isEmphasized ? "Remove Emphasis" : "Emphasize",
-                            systemImage: message.isEmphasized ? "heart.slash.fill" : "heart.fill"
-                        )
-                    }
-                    
-                    Button(action: onForward) {
-                        Label("Forward", systemImage: "arrowshape.turn.up.right.fill")
-                    }
-                    
-                    Button(action: onReply) {
-                        Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
-                    }
-                    
-                    Divider()
-                    
-                    Button(role: .destructive, action: onDelete) {
-                        Label("Delete", systemImage: "trash")
-                    }
+                Button(action: onEmphasize) {
+                    Label(
+                        message.isEmphasized ? "Remove Emphasis" : "Emphasize",
+                        systemImage: message.isEmphasized ? "heart.slash.fill" : "heart.fill"
+                    )
+                }
+                
+                Button(action: onForward) {
+                    Label("Forward", systemImage: "arrowshape.turn.up.right.fill")
+                }
+                
+                Button(action: onReply) {
+                    Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                }
+                
+                Divider()
+                
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
                 }
             }
             
