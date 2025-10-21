@@ -1,0 +1,11 @@
+=================================
+MessageAI Cognito Configuration
+=================================
+
+User Pool ID: us-east-1_rEqDcYy74
+App Client ID: 1hfb6bk7pv3vcga55mr31odtb9
+Region: us-east-1
+
+Save these values! You'll need them for the iOS app.
+
+=================================

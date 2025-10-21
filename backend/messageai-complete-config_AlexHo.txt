@@ -1,0 +1,53 @@
+===========================================
+MessageAI Complete Configuration - AlexHo
+===========================================
+
+COGNITO:
+--------
+User Pool ID: us-east-1_aJN47Jgfy
+App Client ID: 55d6h6f4he7j72082d086red5b
+Region: us-east-1
+
+DYNAMODB:
+---------
+Users Table: MessageAI-Users_AlexHo
+Conversations Table: MessageAI-Conversations_AlexHo
+Messages Table: MessageAI-Messages_AlexHo
+
+LAMBDA FUNCTIONS:
+-----------------
+Signup: messageai-signup_AlexHo
+Login: messageai-login_AlexHo
+
+API GATEWAY:
+------------
+API ID: hzbifqs8e2
+Base URL: https://hzbifqs8e2.execute-api.us-east-1.amazonaws.com/prod
+
+API ENDPOINTS:
+--------------
+Signup: POST https://hzbifqs8e2.execute-api.us-east-1.amazonaws.com/prod/auth/signup
+Login:  POST https://hzbifqs8e2.execute-api.us-east-1.amazonaws.com/prod/auth/login
+
+USAGE EXAMPLES:
+---------------
+
+# Signup
+curl -X POST https://hzbifqs8e2.execute-api.us-east-1.amazonaws.com/prod/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Test123!","name":"Test User"}'
+
+# Login
+curl -X POST https://hzbifqs8e2.execute-api.us-east-1.amazonaws.com/prod/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Test123!"}'
+
+iOS APP CONFIGURATION:
+----------------------
+Add this to your NetworkService.swift:
+
+let baseURL = "https://hzbifqs8e2.execute-api.us-east-1.amazonaws.com/prod"
+let userPoolId = "us-east-1_aJN47Jgfy"
+let appClientId = "55d6h6f4he7j72082d086red5b"
+
+===========================================

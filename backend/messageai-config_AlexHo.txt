@@ -1,0 +1,31 @@
+===========================================
+MessageAI Backend Configuration - AlexHo
+===========================================
+
+COGNITO:
+--------
+User Pool ID: us-east-1_aJN47Jgfy
+App Client ID: 55d6h6f4he7j72082d086red5b
+User Pool Name: MessageAI-UserPool_AlexHo
+Region: us-east-1
+
+DYNAMODB TABLES:
+----------------
+Users Table: MessageAI-Users_AlexHo
+Conversations Table: MessageAI-Conversations_AlexHo
+Messages Table: MessageAI-Messages_AlexHo
+
+NOTES:
+------
+- All resources have "_AlexHo" suffix
+- User Pool configured for email authentication
+- Password requires: 8+ chars, uppercase, lowercase, number, symbol
+- Required attributes: email, name
+
+NEXT STEPS:
+-----------
+1. Create Lambda functions
+2. Set up API Gateway
+3. Build iOS authentication screens
+
+===========================================
