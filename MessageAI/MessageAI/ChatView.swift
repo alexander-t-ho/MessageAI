@@ -347,22 +347,7 @@ struct MessageBubble: View {
                 Spacer(minLength: 60)
             }
             
-            ZStack(alignment: .trailing) {
-                // Trash icon background (shows when swiping left)
-                if swipeOffset < -10 && !message.isDeleted {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "trash.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding(.trailing, 20)
-                            .opacity(Double(min(abs(swipeOffset) / 60.0, 1.0)))
-                    }
-                    .frame(height: 50)
-                    .background(Color.red)
-                    .cornerRadius(20)
-                }
-                
+            ZStack(alignment: .leading) {
                 // Reply icon background (shows when swiping right)
                 if swipeOffset > 10 {
                     HStack {
@@ -459,20 +444,17 @@ struct MessageBubble: View {
                 DragGesture()
                     .onChanged { value in
                         let translation = value.translation.width
-                        // Swipe RIGHT for reply (positive), LEFT for delete (negative)
+                        // Swipe RIGHT for reply only
                         if translation > 0 {
-                            swipeOffset = min(translation, 60) // Right swipe for reply
+                            swipeOffset = min(translation, 60)
                         } else {
-                            swipeOffset = max(translation, -60) // Left swipe for delete
+                            swipeOffset = 0 // No swipe left action
                         }
                     }
                     .onEnded { value in
                         if swipeOffset > 30 {
                             // Trigger reply (swipe right)
                             onReply()
-                        } else if swipeOffset < -30 && !message.isDeleted {
-                            // Trigger delete (swipe left) - only if not already deleted
-                            onDelete()
                         }
                         // Animate back to original position
                         withAnimation(.spring()) {
@@ -562,43 +544,43 @@ struct MessageBubble: View {
     }
 }
 
-// MARK: - Reply Banner
+// MARK: - Reply Banner (Smaller Version)
 
 struct ReplyBanner: View {
     let message: MessageData
     let onCancel: () -> Void
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             // Vertical accent bar
             Rectangle()
                 .fill(Color.blue)
-                .frame(width: 3)
+                .frame(width: 2)
             
-            // Reply content
-            VStack(alignment: .leading, spacing: 2) {
+            // Reply content (more compact)
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Replying to \(message.senderName)")
-                    .font(.caption)
+                    .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundColor(.blue)
                 
                 Text(message.content)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(.gray)
                     .lineLimit(1)
             }
             
             Spacer()
             
-            // Cancel button
+            // Cancel button (smaller)
             Button(action: onCancel) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
+                    .font(.caption)
                     .foregroundColor(.gray)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
         .background(Color(.systemGray6))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
