@@ -236,21 +236,31 @@ struct ChatView: View {
     }
     
     private func deleteMessage(_ message: MessageData) {
-        // If message is still sending, delete completely
-        if message.status == "sending" {
-            do {
-                modelContext.delete(message)
-                try modelContext.save()
-            } catch {
-                print("Error deleting message: \(error)")
-            }
-        } else {
-            // For sent/delivered/read messages, mark as deleted
-            message.isDeleted = true
-            do {
-                try modelContext.save()
-            } catch {
-                print("Error marking message as deleted: \(error)")
+        print("🗑️ Delete triggered for message: \(message.id)")
+        print("   Status: \(message.status)")
+        print("   Already deleted: \(message.isDeleted)")
+        
+        withAnimation {
+            // If message is still sending, delete completely
+            if message.status == "sending" {
+                print("   → Deleting completely (sending status)")
+                do {
+                    modelContext.delete(message)
+                    try modelContext.save()
+                    print("   ✅ Message deleted successfully")
+                } catch {
+                    print("   ❌ Error deleting message: \(error)")
+                }
+            } else {
+                // For sent/delivered/read messages, mark as deleted
+                print("   → Marking as deleted (sent/delivered/read status)")
+                message.isDeleted = true
+                do {
+                    try modelContext.save()
+                    print("   ✅ Message marked as deleted")
+                } catch {
+                    print("   ❌ Error marking message as deleted: \(error)")
+                }
             }
         }
     }
@@ -337,6 +347,37 @@ struct MessageBubble: View {
                 Spacer(minLength: 60)
             }
             
+            ZStack(alignment: .trailing) {
+                // Trash icon background (shows when swiping left)
+                if swipeOffset < -10 && !message.isDeleted {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "trash.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(.trailing, 20)
+                            .opacity(Double(min(abs(swipeOffset) / 60.0, 1.0)))
+                    }
+                    .frame(height: 50)
+                    .background(Color.red)
+                    .cornerRadius(20)
+                }
+                
+                // Reply icon background (shows when swiping right)
+                if swipeOffset > 10 {
+                    HStack {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(.leading, 20)
+                            .opacity(Double(min(swipeOffset / 60.0, 1.0)))
+                        Spacer()
+                    }
+                    .frame(height: 50)
+                    .background(Color.blue)
+                    .cornerRadius(20)
+                }
+                
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
                 // If message is deleted, show placeholder
                 if message.isDeleted {
@@ -413,6 +454,7 @@ struct MessageBubble: View {
                 }
             }
             .offset(x: swipeOffset)
+            } // Close ZStack
             .gesture(
                 DragGesture()
                     .onChanged { value in
@@ -438,6 +480,7 @@ struct MessageBubble: View {
                         }
                     }
             )
+            .animation(.easeInOut(duration: 0.2), value: swipeOffset)
             .contextMenu {
                 if !message.isDeleted {
                     Button(action: onEmphasize) {
