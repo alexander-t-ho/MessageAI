@@ -13,9 +13,12 @@ struct ChatView: View {
     
     @Environment(\.modelContext) private var modelContext
     @Query private var allMessages: [MessageData]
+    @Query private var allConversations: [ConversationData]
     @State private var messageText = ""
     @State private var isLoading = false
     @State private var replyingToMessage: MessageData? // Message being replied to
+    @State private var showForwardSheet = false
+    @State private var messageToForward: MessageData?
     @FocusState private var isInputFocused: Bool
     
     private var databaseService: DatabaseService {
@@ -29,6 +32,11 @@ struct ChatView: View {
             .sorted { $0.timestamp < $1.timestamp }
     }
     
+    // Other conversations for forwarding
+    private var otherConversations: [ConversationData] {
+        allConversations.filter { $0.id != conversation.id }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Messages list
@@ -39,6 +47,9 @@ struct ChatView: View {
                             MessageBubble(
                                 message: message,
                                 onReply: { replyToMessage(message) },
+                                onDelete: { deleteMessage(message) },
+                                onEmphasize: { toggleEmphasis(message) },
+                                onForward: { forwardMessage(message) },
                                 onTapReply: { scrollToMessage($0, proxy: proxy) }
                             )
                             .id(message.id)
@@ -104,6 +115,17 @@ struct ChatView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showForwardSheet) {
+            if let message = messageToForward {
+                ForwardMessageView(
+                    message: message,
+                    conversations: otherConversations,
+                    onForward: { conversation in
+                        forwardToConversation(message, to: conversation)
+                    }
+                )
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -212,6 +234,89 @@ struct ChatView: View {
         
         // TODO: Could add a highlight animation here
     }
+    
+    private func deleteMessage(_ message: MessageData) {
+        // If message is still sending, delete completely
+        if message.status == "sending" {
+            do {
+                modelContext.delete(message)
+                try modelContext.save()
+            } catch {
+                print("Error deleting message: \(error)")
+            }
+        } else {
+            // For sent/delivered/read messages, mark as deleted
+            message.isDeleted = true
+            do {
+                try modelContext.save()
+            } catch {
+                print("Error marking message as deleted: \(error)")
+            }
+        }
+    }
+    
+    private func toggleEmphasis(_ message: MessageData) {
+        let currentUserId = "current-user-id" // TODO: Replace with actual user ID
+        
+        if message.emphasizedBy.contains(currentUserId) {
+            // Remove emphasis
+            message.emphasizedBy.removeAll { $0 == currentUserId }
+            message.isEmphasized = !message.emphasizedBy.isEmpty
+        } else {
+            // Add emphasis
+            message.emphasizedBy.append(currentUserId)
+            message.isEmphasized = true
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error toggling emphasis: \(error)")
+        }
+    }
+    
+    private func forwardMessage(_ message: MessageData) {
+        messageToForward = message
+        showForwardSheet = true
+    }
+    
+    private func forwardToConversation(_ message: MessageData, to targetConversation: ConversationData) {
+        // Create a new message in the target conversation
+        let forwardedMessage = MessageData(
+            conversationId: targetConversation.id,
+            senderId: "current-user-id",
+            senderName: "You",
+            content: message.content,
+            timestamp: Date(),
+            status: "sending",
+            isSentByCurrentUser: true
+        )
+        
+        do {
+            try databaseService.saveMessage(forwardedMessage)
+            
+            // Update target conversation
+            targetConversation.lastMessage = message.content
+            targetConversation.lastMessageTime = Date()
+            try modelContext.save()
+            
+            // Close sheet
+            showForwardSheet = false
+            messageToForward = nil
+            
+            // Simulate sending
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                forwardedMessage.status = "sent"
+                do {
+                    try modelContext.save()
+                } catch {
+                    print("Error updating forwarded message status: \(error)")
+                }
+            }
+        } catch {
+            print("Error forwarding message: \(error)")
+        }
+    }
 }
 
 // MARK: - Message Bubble
@@ -219,6 +324,9 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: MessageData
     let onReply: () -> Void
+    let onDelete: () -> Void
+    let onEmphasize: () -> Void
+    let onForward: () -> Void
     let onTapReply: (String) -> Void
     
     @State private var swipeOffset: CGFloat = 0
@@ -230,45 +338,68 @@ struct MessageBubble: View {
             }
             
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                // Reply context (if this message is a reply)
-                if let replyToContent = message.replyToContent,
-                   let replyToSenderName = message.replyToSenderName,
-                   let replyToId = message.replyToMessageId {
-                    Button(action: { onTapReply(replyToId) }) {
-                        HStack(spacing: 6) {
-                            Rectangle()
-                                .fill(isFromCurrentUser ? Color.white.opacity(0.6) : Color.blue)
-                                .frame(width: 3)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(replyToSenderName)
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(isFromCurrentUser ? .white.opacity(0.9) : .blue)
+                // If message is deleted, show placeholder
+                if message.isDeleted {
+                    Text("Message Deleted")
+                        .italic()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background((isFromCurrentUser ? Color.blue : Color(.systemGray5)).opacity(0.3))
+                        .foregroundColor(.gray)
+                        .cornerRadius(20)
+                } else {
+                    // Reply context (if this message is a reply)
+                    if let replyToContent = message.replyToContent,
+                       let replyToSenderName = message.replyToSenderName,
+                       let replyToId = message.replyToMessageId {
+                        Button(action: { onTapReply(replyToId) }) {
+                            HStack(spacing: 6) {
+                                Rectangle()
+                                    .fill(isFromCurrentUser ? Color.white.opacity(0.6) : Color.blue)
+                                    .frame(width: 3)
                                 
-                                Text(replyToContent)
-                                    .font(.caption)
-                                    .foregroundColor(isFromCurrentUser ? .white.opacity(0.7) : .gray)
-                                    .lineLimit(2)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(replyToSenderName)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(isFromCurrentUser ? .white.opacity(0.9) : .blue)
+                                    
+                                    Text(replyToContent)
+                                        .font(.caption)
+                                        .foregroundColor(isFromCurrentUser ? .white.opacity(0.7) : .gray)
+                                        .lineLimit(2)
+                                }
+                                
+                                Spacer()
                             }
-                            
-                            Spacer()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(isFromCurrentUser ? Color.white.opacity(0.2) : Color.gray.opacity(0.1))
+                            .cornerRadius(8)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(isFromCurrentUser ? Color.white.opacity(0.2) : Color.gray.opacity(0.1))
-                        .cornerRadius(8)
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    
+                    // Message content with emphasis overlay
+                    ZStack(alignment: .topTrailing) {
+                        Text(message.content)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                            .foregroundColor(isFromCurrentUser ? .white : .primary)
+                            .cornerRadius(20)
+                        
+                        // Emphasis indicator
+                        if message.isEmphasized {
+                            Image(systemName: "heart.fill")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .padding(4)
+                                .background(Circle().fill(Color.white))
+                                .offset(x: 8, y: -8)
+                        }
+                    }
                 }
-                
-                // Message content
-                Text(message.content)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
-                    .foregroundColor(isFromCurrentUser ? .white : .primary)
-                    .cornerRadius(20)
                 
                 // Timestamp and status
                 HStack(spacing: 4) {
@@ -276,7 +407,7 @@ struct MessageBubble: View {
                         .font(.caption2)
                         .foregroundColor(.gray)
                     
-                    if isFromCurrentUser {
+                    if isFromCurrentUser && !message.isDeleted {
                         statusIcon
                     }
                 }
@@ -285,16 +416,21 @@ struct MessageBubble: View {
             .gesture(
                 DragGesture()
                     .onChanged { value in
-                        // Only allow swiping left (negative translation)
                         let translation = value.translation.width
-                        if translation < 0 {
-                            swipeOffset = max(translation, -60)
+                        // Swipe RIGHT for reply (positive), LEFT for delete (negative)
+                        if translation > 0 {
+                            swipeOffset = min(translation, 60) // Right swipe for reply
+                        } else {
+                            swipeOffset = max(translation, -60) // Left swipe for delete
                         }
                     }
                     .onEnded { value in
-                        if swipeOffset < -30 {
-                            // Trigger reply
+                        if swipeOffset > 30 {
+                            // Trigger reply (swipe right)
                             onReply()
+                        } else if swipeOffset < -30 && !message.isDeleted {
+                            // Trigger delete (swipe left) - only if not already deleted
+                            onDelete()
                         }
                         // Animate back to original position
                         withAnimation(.spring()) {
@@ -302,6 +438,30 @@ struct MessageBubble: View {
                         }
                     }
             )
+            .contextMenu {
+                if !message.isDeleted {
+                    Button(action: onEmphasize) {
+                        Label(
+                            message.isEmphasized ? "Remove Emphasis" : "Emphasize",
+                            systemImage: message.isEmphasized ? "heart.slash.fill" : "heart.fill"
+                        )
+                    }
+                    
+                    Button(action: onForward) {
+                        Label("Forward", systemImage: "arrowshape.turn.up.right.fill")
+                    }
+                    
+                    Button(action: onReply) {
+                        Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                    }
+                    
+                    Divider()
+                    
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
             
             if !isFromCurrentUser {
                 Spacer(minLength: 60)
@@ -398,6 +558,130 @@ struct ReplyBanner: View {
         .padding(.vertical, 8)
         .background(Color(.systemGray6))
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+// MARK: - Forward Message View
+
+struct ForwardMessageView: View {
+    @Environment(\.dismiss) private var dismiss
+    let message: MessageData
+    let conversations: [ConversationData]
+    let onForward: (ConversationData) -> Void
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Message preview
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Forward Message")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                    
+                    HStack {
+                        Rectangle()
+                            .fill(Color.blue)
+                            .frame(width: 3)
+                        
+                        Text(message.content)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .lineLimit(3)
+                            .padding(.leading, 8)
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                }
+                .padding()
+                
+                Divider()
+                
+                // Conversation list
+                if conversations.isEmpty {
+                    VStack(spacing: 20) {
+                        Image(systemName: "tray")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        
+                        Text("No other conversations")
+                            .font(.headline)
+                            .foregroundColor(.gray)
+                        
+                        Text("Create a new conversation first")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    List(conversations) { conversation in
+                        Button(action: {
+                            onForward(conversation)
+                            dismiss()
+                        }) {
+                            HStack(spacing: 12) {
+                                // Avatar
+                                Circle()
+                                    .fill(avatarColor(for: conversation))
+                                    .frame(width: 50, height: 50)
+                                    .overlay(
+                                        Text(displayName(for: conversation).prefix(1).uppercased())
+                                            .font(.title3)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    )
+                                
+                                // Name
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(displayName(for: conversation))
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    if let lastMessage = conversation.lastMessage {
+                                        Text(lastMessage)
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("Forward To...")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func displayName(for conversation: ConversationData) -> String {
+        if conversation.isGroupChat {
+            return conversation.groupName ?? "Group Chat"
+        } else {
+            return conversation.participantNames.first ?? "Unknown"
+        }
+    }
+    
+    private func avatarColor(for conversation: ConversationData) -> Color {
+        let colors: [Color] = [.blue, .purple, .green, .orange, .pink, .red]
+        let name = displayName(for: conversation)
+        let index = abs(name.hashValue % colors.count)
+        return colors[index]
     }
 }
 

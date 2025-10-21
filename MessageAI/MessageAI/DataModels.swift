@@ -26,6 +26,13 @@ final class MessageData {
     var replyToContent: String? // Preview of message being replied to
     var replyToSenderName: String? // Name of person who sent the original message
     
+    // Delete feature
+    var isDeleted: Bool // True if message was deleted
+    
+    // Emphasis feature (like/reaction)
+    var isEmphasized: Bool // True if message has emphasis
+    var emphasizedBy: [String] // Array of user IDs who emphasized this message
+    
     init(
         id: String = UUID().uuidString,
         conversationId: String,
@@ -38,7 +45,10 @@ final class MessageData {
         isSentByCurrentUser: Bool,
         replyToMessageId: String? = nil,
         replyToContent: String? = nil,
-        replyToSenderName: String? = nil
+        replyToSenderName: String? = nil,
+        isDeleted: Bool = false,
+        isEmphasized: Bool = false,
+        emphasizedBy: [String] = []
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -52,6 +62,9 @@ final class MessageData {
         self.replyToMessageId = replyToMessageId
         self.replyToContent = replyToContent
         self.replyToSenderName = replyToSenderName
+        self.isDeleted = isDeleted
+        self.isEmphasized = isEmphasized
+        self.emphasizedBy = emphasizedBy
     }
 }
 
