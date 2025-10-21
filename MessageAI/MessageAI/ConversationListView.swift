@@ -92,6 +92,17 @@ struct ConversationListView: View {
 
 struct ConversationRow: View {
     let conversation: ConversationData
+    @Environment(\.modelContext) private var modelContext
+    @Query private var allDrafts: [DraftData]
+    
+    // Get draft for this conversation
+    private var draft: DraftData? {
+        allDrafts.first { $0.conversationId == conversation.id }
+    }
+    
+    private var databaseService: DatabaseService {
+        DatabaseService(modelContext: modelContext)
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -123,7 +134,21 @@ struct ConversationRow: View {
                 }
                 
                 HStack {
-                    if let lastMessage = conversation.lastMessage {
+                    // Show draft if exists, otherwise show last message
+                    if let draft = draft {
+                        // Draft indicator
+                        HStack(spacing: 4) {
+                            Text("Draft:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.red)
+                            
+                            Text(draft.draftContent)
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                        }
+                        .lineLimit(2)
+                    } else if let lastMessage = conversation.lastMessage {
                         Text(lastMessage)
                             .font(.subheadline)
                             .foregroundColor(.gray)
