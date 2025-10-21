@@ -19,18 +19,16 @@ struct ChatView: View {
     @State private var replyingToMessage: MessageData? // Message being replied to
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
-    @State private var refreshTrigger = 0 // Force UI refresh when messages are deleted
+    @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
     }
     
-    // Filter messages for this conversation (exclude deleted messages)
-    private var messages: [MessageData] {
-        // Include refreshTrigger to force recomputation when it changes
-        let _ = refreshTrigger
-        return allMessages
+    // Computed messages from query (for reference)
+    private var queriedMessages: [MessageData] {
+        allMessages
             .filter { $0.conversationId == conversation.id && !$0.isDeleted }
             .sorted { $0.timestamp < $1.timestamp }
     }
@@ -46,7 +44,7 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(messages) { message in
+                        ForEach(visibleMessages) { message in
                             MessageBubble(
                                 message: message,
                                 onReply: { replyToMessage(message) },
@@ -59,19 +57,27 @@ struct ChatView: View {
                         }
                     }
                     .padding()
-                    .id(refreshTrigger) // Force refresh when messages are deleted
                 }
-                .onChange(of: messages.count) { _, _ in
+                .onChange(of: queriedMessages.count) { oldCount, newCount in
+                    print("📊 Messages count changed: \(oldCount) → \(newCount)")
+                    // Update visible messages when query changes
+                    visibleMessages = queriedMessages
+                    
                     // Auto-scroll to bottom when new message arrives
-                    if let lastMessage = messages.last {
+                    if newCount > oldCount, let lastMessage = visibleMessages.last {
                         withAnimation {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
                     }
                 }
                 .onAppear {
+                    print("👁️ ChatView appeared - loading messages")
+                    // Initialize visible messages from query
+                    visibleMessages = queriedMessages
+                    print("📊 Loaded \(visibleMessages.count) messages")
+                    
                     // Scroll to bottom on appear
-                    if let lastMessage = messages.last {
+                    if let lastMessage = visibleMessages.last {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
@@ -192,6 +198,10 @@ struct ChatView: View {
             // Save to local database
             try databaseService.saveMessage(message)
             
+            // IMMEDIATELY add to visible messages (optimistic UI update)
+            visibleMessages.append(message)
+            print("✅ Message added to UI - now showing \(visibleMessages.count) messages")
+            
             // Update conversation
             conversation.lastMessage = text
             conversation.lastMessageTime = Date()
@@ -202,7 +212,7 @@ struct ChatView: View {
             replyingToMessage = nil
             try databaseService.deleteDraft(for: conversation.id)
             
-            // TODO: Phase 3 - Send to server
+            // TODO: Phase 4 - Send to server
             // For now, just mark as sent after a brief delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 message.status = "sent"
@@ -244,43 +254,41 @@ struct ChatView: View {
         print("   Content: \(message.content)")
         print("   Status: \(message.status)")
         print("   Already deleted: \(message.isDeleted)")
+        print("   Current visible messages: \(visibleMessages.count)")
+        
+        // IMMEDIATELY remove from UI (before database operation)
+        withAnimation {
+            visibleMessages.removeAll { $0.id == message.id }
+        }
+        print("   ✅ Removed from UI immediately - now showing \(visibleMessages.count) messages")
         
         // If message is still sending, delete completely from database
         if message.status == "sending" {
-            print("   → Deleting completely (sending status)")
+            print("   → Deleting completely from database (sending status)")
             modelContext.delete(message)
             
             do {
                 try modelContext.save()
-                print("   ✅ Message deleted successfully - removed from database")
-                
-                // Force UI refresh
-                withAnimation {
-                    refreshTrigger += 1
-                }
-                print("   🔄 UI refresh triggered (refreshTrigger = \(refreshTrigger))")
+                print("   ✅ Message deleted from database")
             } catch {
                 print("   ❌ Error deleting message: \(error)")
+                // Rollback UI change if database fails
+                visibleMessages = queriedMessages
             }
         } else {
             // For sent/delivered/read messages: Keep in database but hide from both users
-            print("   → Marking as deleted (soft delete - kept in database but hidden from UI)")
+            print("   → Marking as deleted in database (soft delete)")
             
             // Mark as deleted - message stays in database but won't be displayed
             message.isDeleted = true
             
             do {
                 try modelContext.save()
-                print("   ✅ Message hidden from both users (still in database)")
-                print("   ✅ isDeleted = \(message.isDeleted)")
-                
-                // Force UI refresh
-                withAnimation {
-                    refreshTrigger += 1
-                }
-                print("   🔄 UI refresh triggered (refreshTrigger = \(refreshTrigger))")
+                print("   ✅ Message marked as deleted in database (isDeleted = true)")
             } catch {
                 print("   ❌ Error marking message as deleted: \(error)")
+                // Rollback UI change if database fails
+                visibleMessages = queriedMessages
             }
         }
     }
