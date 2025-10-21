@@ -76,11 +76,11 @@ class WebSocketService: ObservableObject {
     
     init() {
         // Load WebSocket URL from file or use config
-        if let url = try? String(contentsOfFile: "/Users/alexho/MessageAI/websocket-url.txt").trimmingCharacters(in: .whitespacesAndNewlines) {
-            self.webSocketURL = url
+        if let url = try? String(contentsOfFile: "/Users/alexho/MessageAI/websocket-url.txt", encoding: .utf8) {
+            self.webSocketURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
-            // Fallback to hardcoded URL
-            self.webSocketURL = "wss://bnbr75tld0.execute-api.us-east-1.amazonaws.com/production"
+            // Fallback to hardcoded URL from Config
+            self.webSocketURL = Config.webSocketURL
         }
         
         print("💡 WebSocketService initialized with URL: \(webSocketURL)")
