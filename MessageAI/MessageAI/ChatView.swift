@@ -19,6 +19,7 @@ struct ChatView: View {
     @State private var replyingToMessage: MessageData? // Message being replied to
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
+    @State private var refreshTrigger = 0 // Force UI refresh when messages are deleted
     @FocusState private var isInputFocused: Bool
     
     private var databaseService: DatabaseService {
@@ -27,7 +28,9 @@ struct ChatView: View {
     
     // Filter messages for this conversation (exclude deleted messages)
     private var messages: [MessageData] {
-        allMessages
+        // Include refreshTrigger to force recomputation when it changes
+        let _ = refreshTrigger
+        return allMessages
             .filter { $0.conversationId == conversation.id && !$0.isDeleted }
             .sorted { $0.timestamp < $1.timestamp }
     }
@@ -56,6 +59,7 @@ struct ChatView: View {
                         }
                     }
                     .padding()
+                    .id(refreshTrigger) // Force refresh when messages are deleted
                 }
                 .onChange(of: messages.count) { _, _ in
                     // Auto-scroll to bottom when new message arrives
@@ -249,6 +253,12 @@ struct ChatView: View {
             do {
                 try modelContext.save()
                 print("   ✅ Message deleted successfully - removed from database")
+                
+                // Force UI refresh
+                withAnimation {
+                    refreshTrigger += 1
+                }
+                print("   🔄 UI refresh triggered (refreshTrigger = \(refreshTrigger))")
             } catch {
                 print("   ❌ Error deleting message: \(error)")
             }
@@ -263,6 +273,12 @@ struct ChatView: View {
                 try modelContext.save()
                 print("   ✅ Message hidden from both users (still in database)")
                 print("   ✅ isDeleted = \(message.isDeleted)")
+                
+                // Force UI refresh
+                withAnimation {
+                    refreshTrigger += 1
+                }
+                print("   🔄 UI refresh triggered (refreshTrigger = \(refreshTrigger))")
             } catch {
                 print("   ❌ Error marking message as deleted: \(error)")
             }
