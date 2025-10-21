@@ -11,8 +11,17 @@ struct ContentView: View {
     @StateObject private var authViewModel = AuthViewModel()
     @StateObject private var webSocketService = WebSocketService()
     
+    init() {
+        // LOUD console output to verify console is working
+        print("🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨")
+        print("🚨 MESSAGEAI APP STARTED - CONSOLE IS WORKING! 🚨")
+        print("🚨 IF YOU SEE THIS, YOUR CONSOLE IS OPEN! 🚨")
+        print("🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨")
+    }
+    
     var body: some View {
-        Group {
+        let _ = print("👁️ ContentView body rendered")
+        return Group {
             if authViewModel.isAuthenticated {
                 HomeView()
                     .environmentObject(authViewModel)

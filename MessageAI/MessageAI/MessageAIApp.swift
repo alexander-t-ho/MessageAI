@@ -10,6 +10,17 @@ import SwiftData
 
 @main
 struct MessageAIApp: App {
+    
+    init() {
+        // EXTREMELY LOUD console output - THIS RUNS FIRST!
+        print("\n\n")
+        print("=" .appending(String(repeating: "=", count: 60)))
+        print("🚨🚨🚨 MessageAI APP IS STARTING! 🚨🚨🚨")
+        print("🚨🚨🚨 IF YOU SEE THIS, CONSOLE WORKS! 🚨🚨🚨")
+        print("=" .appending(String(repeating: "=", count: 60)))
+        print("\n\n")
+    }
+    
     // Configure SwiftData container
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
