@@ -1,0 +1,15 @@
+{
+  "name": "messageai-websocket",
+  "version": "1.0.0",
+  "description": "WebSocket Lambda functions for MessageAI real-time messaging",
+  "type": "module",
+  "scripts": {
+    "deploy": "./deploy.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0"
+  }
+}
+
