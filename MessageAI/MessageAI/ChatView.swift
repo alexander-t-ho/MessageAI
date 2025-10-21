@@ -12,6 +12,7 @@ struct ChatView: View {
     let conversation: ConversationData
     
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var webSocketService: WebSocketService
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @State private var messageText = ""
@@ -136,6 +137,12 @@ struct ChatView: View {
                 )
             }
         }
+        .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
+            // New message received via WebSocket
+            if newCount > oldCount, let newMessage = webSocketService.receivedMessages.last {
+                handleReceivedMessage(newMessage)
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -212,8 +219,21 @@ struct ChatView: View {
             replyingToMessage = nil
             try databaseService.deleteDraft(for: conversation.id)
             
-            // TODO: Phase 4 - Send to server
-            // For now, just mark as sent after a brief delay
+            // Phase 4: Send via WebSocket
+            webSocketService.sendMessage(
+                messageId: message.id,
+                conversationId: conversation.id,
+                senderId: "current-user-id", // TODO: Replace with actual Cognito user ID
+                senderName: "You", // TODO: Replace with actual user name
+                recipientId: "recipient-user-id", // TODO: Get from conversation
+                content: text,
+                timestamp: Date(),
+                replyToMessageId: replyingToMessage?.id,
+                replyToContent: replyingToMessage?.content,
+                replyToSenderName: replyingToMessage?.senderName
+            )
+            
+            // Mark as sent after brief delay (will be updated by delivery receipt)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 message.status = "sent"
                 do {
@@ -316,6 +336,59 @@ struct ChatView: View {
     private func forwardMessage(_ message: MessageData) {
         messageToForward = message
         showForwardSheet = true
+    }
+    
+    private func handleReceivedMessage(_ payload: MessagePayload) {
+        print("📥 Handling received WebSocket message: \(payload.messageId)")
+        
+        // Only handle messages for this conversation
+        guard payload.conversationId == conversation.id else {
+            print("   ⏭️ Message is for different conversation, ignoring")
+            return
+        }
+        
+        // Check if message already exists (avoid duplicates)
+        if visibleMessages.contains(where: { $0.id == payload.messageId }) {
+            print("   ⚠️ Message already exists, ignoring duplicate")
+            return
+        }
+        
+        // Parse timestamp
+        let formatter = ISO8601DateFormatter()
+        let timestamp = formatter.date(from: payload.timestamp) ?? Date()
+        
+        // Create MessageData from payload
+        let newMessage = MessageData(
+            conversationId: payload.conversationId,
+            senderId: payload.senderId,
+            senderName: payload.senderName,
+            content: payload.content,
+            timestamp: timestamp,
+            status: payload.status,
+            isSentByCurrentUser: false, // Message from other user
+            replyToMessageId: payload.replyToMessageId,
+            replyToContent: payload.replyToContent,
+            replyToSenderName: payload.replyToSenderName
+        )
+        
+        // Save to database
+        do {
+            try databaseService.saveMessage(newMessage)
+            
+            // Add to visible messages
+            withAnimation {
+                visibleMessages.append(newMessage)
+            }
+            
+            // Update conversation
+            conversation.lastMessage = payload.content
+            conversation.lastMessageTime = timestamp
+            try modelContext.save()
+            
+            print("✅ Message added to conversation")
+        } catch {
+            print("❌ Error saving received message: \(error)")
+        }
     }
     
     private func forwardToConversation(_ message: MessageData, to targetConversation: ConversationData) {
