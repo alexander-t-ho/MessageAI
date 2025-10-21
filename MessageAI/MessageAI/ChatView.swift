@@ -237,30 +237,38 @@ struct ChatView: View {
     
     private func deleteMessage(_ message: MessageData) {
         print("🗑️ Delete triggered for message: \(message.id)")
+        print("   Content: \(message.content)")
         print("   Status: \(message.status)")
         print("   Already deleted: \(message.isDeleted)")
         
-        withAnimation {
-            // If message is still sending, delete completely
-            if message.status == "sending" {
-                print("   → Deleting completely (sending status)")
-                do {
-                    modelContext.delete(message)
-                    try modelContext.save()
-                    print("   ✅ Message deleted successfully")
-                } catch {
-                    print("   ❌ Error deleting message: \(error)")
-                }
-            } else {
-                // For sent/delivered/read messages, mark as deleted
-                print("   → Marking as deleted (sent/delivered/read status)")
-                message.isDeleted = true
-                do {
-                    try modelContext.save()
-                    print("   ✅ Message marked as deleted")
-                } catch {
-                    print("   ❌ Error marking message as deleted: \(error)")
-                }
+        // If message is still sending, delete completely
+        if message.status == "sending" {
+            print("   → Deleting completely (sending status)")
+            modelContext.delete(message)
+            
+            do {
+                try modelContext.save()
+                print("   ✅ Message deleted successfully from database")
+            } catch {
+                print("   ❌ Error deleting message: \(error)")
+            }
+        } else {
+            // For sent/delivered/read messages, mark as deleted
+            print("   → Marking as deleted (sent/delivered/read status)")
+            
+            // IMPORTANT: Modify the object to trigger SwiftData change
+            message.isDeleted = true
+            
+            // Also clear the content to force UI update
+            let originalContent = message.content
+            message.content = originalContent // Force update
+            
+            do {
+                try modelContext.save()
+                print("   ✅ Message marked as deleted in database")
+                print("   ✅ isDeleted = \(message.isDeleted)")
+            } catch {
+                print("   ❌ Error marking message as deleted: \(error)")
             }
         }
     }
@@ -544,43 +552,44 @@ struct MessageBubble: View {
     }
 }
 
-// MARK: - Reply Banner (Smaller Version)
+// MARK: - Reply Banner (Very Compact)
 
 struct ReplyBanner: View {
     let message: MessageData
     let onCancel: () -> Void
     
     var body: some View {
-        HStack(spacing: 8) {
-            // Vertical accent bar
+        HStack(spacing: 6) {
+            // Vertical accent bar (thinner)
             Rectangle()
                 .fill(Color.blue)
-                .frame(width: 2)
+                .frame(width: 2, height: 18)
             
-            // Reply content (more compact)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Replying to \(message.senderName)")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
+            // Reply content (single line, very compact)
+            HStack(spacing: 3) {
+                Text("Replying:")
+                    .font(.system(size: 11))
+                    .fontWeight(.medium)
                     .foregroundColor(.blue)
                 
                 Text(message.content)
-                    .font(.caption2)
+                    .font(.system(size: 11))
                     .foregroundColor(.gray)
                     .lineLimit(1)
             }
             
             Spacer()
             
-            // Cancel button (smaller)
+            // Cancel button (very small)
             Button(action: onCancel) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.caption)
+                    .font(.system(size: 14))
                     .foregroundColor(.gray)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .frame(height: 24)
         .background(Color(.systemGray6))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
