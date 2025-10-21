@@ -15,7 +15,8 @@ struct MessageAIApp: App {
         let schema = Schema([
             MessageData.self,
             ConversationData.self,
-            ContactData.self
+            ContactData.self,
+            DraftData.self
         ])
         
         let modelConfiguration = ModelConfiguration(

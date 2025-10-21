@@ -12,8 +12,10 @@ struct DatabaseTestView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var messages: [MessageData]
     @Query private var conversations: [ConversationData]
+    @Query private var drafts: [DraftData]
     
     @State private var testMessage = ""
+    @State private var draftText = ""
     @State private var statusMessage = ""
     @State private var messageCount = 0
     @State private var conversationCount = 0
@@ -47,7 +49,7 @@ struct DatabaseTestView: View {
                         Text("Current Data")
                             .font(.headline)
                         
-                        HStack(spacing: 40) {
+                        HStack(spacing: 30) {
                             VStack {
                                 Text("\(messages.count)")
                                     .font(.system(size: 36, weight: .bold))
@@ -62,6 +64,15 @@ struct DatabaseTestView: View {
                                     .font(.system(size: 36, weight: .bold))
                                     .foregroundColor(.green)
                                 Text("Conversations")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            VStack {
+                                Text("\(drafts.count)")
+                                    .font(.system(size: 36, weight: .bold))
+                                    .foregroundColor(.orange)
+                                Text("Drafts")
                                     .font(.caption)
                                     .foregroundColor(.gray)
                             }
@@ -102,6 +113,49 @@ struct DatabaseTestView: View {
                     .shadow(radius: 3)
                     .padding(.horizontal)
                     
+                    // Draft Testing
+                    VStack(spacing: 15) {
+                        Text("Test Draft Messages")
+                            .font(.headline)
+                        
+                        TextField("Type a draft message", text: $draftText)
+                            .textFieldStyle(.roundedBorder)
+                            .padding(.horizontal)
+                        
+                        HStack(spacing: 10) {
+                            Button(action: saveDraft) {
+                                HStack {
+                                    Image(systemName: "doc.text.fill")
+                                    Text("Save Draft")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.orange)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                            }
+                            .disabled(draftText.isEmpty)
+                            
+                            Button(action: loadDraft) {
+                                HStack {
+                                    Image(systemName: "arrow.down.doc.fill")
+                                    Text("Load Draft")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(15)
+                    .shadow(radius: 3)
+                    .padding(.horizontal)
+                    
                     // Test Actions
                     VStack(spacing: 10) {
                         Text("Test Actions")
@@ -128,6 +182,14 @@ struct DatabaseTestView: View {
                                 icon: "checkmark.circle.fill",
                                 text: "Test Persistence",
                                 color: .purple
+                            )
+                        }
+                        
+                        Button(action: testDraftPersistence) {
+                            actionButton(
+                                icon: "doc.badge.clock",
+                                text: "Test Draft Persistence",
+                                color: .cyan
                             )
                         }
                         
@@ -199,6 +261,45 @@ struct DatabaseTestView: View {
         }
     }
     
+    private func saveDraft() {
+        guard !draftText.isEmpty else { return }
+        
+        do {
+            try databaseService.saveDraft(
+                conversationId: "test-conversation-1",
+                content: draftText
+            )
+            statusMessage = "📝 Draft saved! (Try closing and reopening the app)"
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                statusMessage = ""
+            }
+        } catch {
+            statusMessage = "❌ Error: \(error.localizedDescription)"
+        }
+    }
+    
+    private func loadDraft() {
+        do {
+            if let draft = try databaseService.getDraft(for: "test-conversation-1") {
+                draftText = draft.draftContent
+                statusMessage = "✅ Draft loaded successfully!"
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    statusMessage = ""
+                }
+            } else {
+                statusMessage = "ℹ️ No draft found for this conversation"
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    statusMessage = ""
+                }
+            }
+        } catch {
+            statusMessage = "❌ Error: \(error.localizedDescription)"
+        }
+    }
+    
     private func createTestConversation() {
         let conversation = ConversationData(
             id: "test-conversation-\(UUID().uuidString.prefix(8))",
@@ -249,6 +350,23 @@ struct DatabaseTestView: View {
             statusMessage = "✅ Persistence working! Found \(count) messages stored locally."
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                statusMessage = ""
+            }
+        } catch {
+            statusMessage = "❌ Error: \(error.localizedDescription)"
+        }
+    }
+    
+    private func testDraftPersistence() {
+        do {
+            let draftCount = drafts.count
+            if draftCount > 0 {
+                statusMessage = "✅ Draft persistence working! Found \(draftCount) draft(s). Close & reopen app to verify!"
+            } else {
+                statusMessage = "ℹ️ No drafts found. Create a draft first, then close and reopen the app to test persistence."
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 statusMessage = ""
             }
         } catch {
@@ -332,6 +450,6 @@ struct MessageRow: View {
 
 #Preview {
     DatabaseTestView()
-        .modelContainer(for: [MessageData.self, ConversationData.self, ContactData.self])
+        .modelContainer(for: [MessageData.self, ConversationData.self, ContactData.self, DraftData.self])
 }
 

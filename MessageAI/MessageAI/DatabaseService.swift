@@ -193,6 +193,63 @@ class DatabaseService {
         }
     }
     
+    // MARK: - Draft Operations
+    
+    /// Save or update a draft message for a conversation
+    func saveDraft(conversationId: String, content: String) throws {
+        // Check if draft already exists
+        let predicate = #Predicate<DraftData> { draft in
+            draft.conversationId == conversationId
+        }
+        let descriptor = FetchDescriptor<DraftData>(predicate: predicate)
+        
+        if let existingDraft = try modelContext.fetch(descriptor).first {
+            // Update existing draft
+            existingDraft.draftContent = content
+            existingDraft.lastUpdated = Date()
+            print("📝 Draft updated for conversation: \(conversationId)")
+        } else {
+            // Create new draft
+            let draft = DraftData(conversationId: conversationId, draftContent: content)
+            modelContext.insert(draft)
+            print("📝 Draft created for conversation: \(conversationId)")
+        }
+        
+        try modelContext.save()
+    }
+    
+    /// Get draft for a conversation
+    func getDraft(for conversationId: String) throws -> DraftData? {
+        let predicate = #Predicate<DraftData> { draft in
+            draft.conversationId == conversationId
+        }
+        let descriptor = FetchDescriptor<DraftData>(predicate: predicate)
+        return try modelContext.fetch(descriptor).first
+    }
+    
+    /// Delete draft after message is sent
+    func deleteDraft(for conversationId: String) throws {
+        if let draft = try getDraft(for: conversationId) {
+            modelContext.delete(draft)
+            try modelContext.save()
+            print("🗑️ Draft deleted for conversation: \(conversationId)")
+        }
+    }
+    
+    /// Get all drafts
+    func getAllDrafts() throws -> [DraftData] {
+        let descriptor = FetchDescriptor<DraftData>(
+            sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
+        )
+        return try modelContext.fetch(descriptor)
+    }
+    
+    /// Check if conversation has a draft
+    func hasDraft(for conversationId: String) throws -> Bool {
+        let draft = try getDraft(for: conversationId)
+        return draft != nil && !draft!.draftContent.isEmpty
+    }
+    
     // MARK: - Utility Methods
     
     /// Get total message count
@@ -227,8 +284,14 @@ class DatabaseService {
             modelContext.delete(contact)
         }
         
+        // Delete all drafts
+        let drafts = try modelContext.fetch(FetchDescriptor<DraftData>())
+        for draft in drafts {
+            modelContext.delete(draft)
+        }
+        
         try modelContext.save()
-        print("🗑️ All local data cleared")
+        print("🗑️ All local data cleared (including drafts)")
     }
 }
 

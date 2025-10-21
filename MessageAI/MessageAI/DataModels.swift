@@ -101,6 +101,24 @@ final class ContactData {
     }
 }
 
+// MARK: - Draft Message Model
+@Model
+final class DraftData {
+    @Attribute(.unique) var conversationId: String
+    var draftContent: String
+    var lastUpdated: Date
+    
+    init(
+        conversationId: String,
+        draftContent: String,
+        lastUpdated: Date = Date()
+    ) {
+        self.conversationId = conversationId
+        self.draftContent = draftContent
+        self.lastUpdated = lastUpdated
+    }
+}
+
 // MARK: - Message Status Enum
 enum MessageStatus: String, Codable {
     case sending = "sending"
