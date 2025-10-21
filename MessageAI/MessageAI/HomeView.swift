@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var showDatabaseTest = false
     
     var body: some View {
         NavigationView {
@@ -82,7 +83,7 @@ struct HomeView: View {
                         Text("✅ User registration")
                         Text("✅ User login")
                         Text("✅ Session management")
-                        Text("⏳ Phase 2: Local Data Persistence")
+                        Text("🔨 Phase 2: Local Data Persistence")
                         Text("⏳ Phase 3: Messaging")
                         
                     }
@@ -92,6 +93,24 @@ struct HomeView: View {
                     .background(Color.white.opacity(0.9))
                     .cornerRadius(15)
                     .shadow(radius: 5)
+                    .padding(.horizontal, 40)
+                    
+                    // Database Test Button
+                    Button(action: {
+                        showDatabaseTest = true
+                    }) {
+                        HStack {
+                            Image(systemName: "cylinder.fill")
+                            Text("Test Database")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.purple)
+                        .cornerRadius(10)
+                        .shadow(radius: 3)
+                    }
                     .padding(.horizontal, 40)
                     
                     Spacer()
@@ -118,6 +137,9 @@ struct HomeView: View {
             }
             .navigationTitle("MessageAI")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showDatabaseTest) {
+                DatabaseTestView()
+            }
         }
     }
 }
