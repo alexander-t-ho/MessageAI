@@ -358,19 +358,15 @@ struct DatabaseTestView: View {
     }
     
     private func testDraftPersistence() {
-        do {
-            let draftCount = drafts.count
-            if draftCount > 0 {
-                statusMessage = "✅ Draft persistence working! Found \(draftCount) draft(s). Close & reopen app to verify!"
-            } else {
-                statusMessage = "ℹ️ No drafts found. Create a draft first, then close and reopen the app to test persistence."
-            }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                statusMessage = ""
-            }
-        } catch {
-            statusMessage = "❌ Error: \(error.localizedDescription)"
+        let draftCount = drafts.count
+        if draftCount > 0 {
+            statusMessage = "✅ Draft persistence working! Found \(draftCount) draft(s). Close & reopen app to verify!"
+        } else {
+            statusMessage = "ℹ️ No drafts found. Create a draft first, then close and reopen the app to test persistence."
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            statusMessage = ""
         }
     }
     
