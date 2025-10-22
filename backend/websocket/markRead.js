@@ -39,18 +39,18 @@ exports.handler = async (event) => {
       if (msg.Item.conversationId !== conversationId) continue;
       if (msg.Item.recipientId !== readerId) continue;
 
-      // Update status to read
+      // Update status to read and append readerId to readBy list (for group chats later)
       await ddb.update({
         TableName: MESSAGES_TABLE,
         Key: { messageId },
-        UpdateExpression: 'SET #s = :read, readAt = :now',
+        UpdateExpression: 'SET #s = :read, readAt = :now, readBy = list_append(if_not_exists(readBy, :empty), :rarr)',
         ExpressionAttributeNames: { '#s': 'status' },
-        ExpressionAttributeValues: { ':read': 'read', ':now': new Date().toISOString() }
+        ExpressionAttributeValues: { ':read': 'read', ':now': new Date().toISOString(), ':empty': [], ':rarr': [readerId] }
       }).promise();
 
       const payload = JSON.stringify({
         type: 'messageStatus',
-        data: { messageId, conversationId, status: 'read' }
+        data: { messageId, conversationId, status: 'read', readerId }
       });
 
       // Notify sender connections

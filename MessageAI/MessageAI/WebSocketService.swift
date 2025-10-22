@@ -60,6 +60,7 @@ struct MessageStatusPayload: Codable {
     let messageId: String
     let conversationId: String
     let status: String // delivered | read
+    let readerId: String?
 }
 
 /// WebSocket Service - Manages real-time messaging connection

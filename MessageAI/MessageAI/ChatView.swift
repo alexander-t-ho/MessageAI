@@ -549,6 +549,7 @@ struct ChatView: View {
             let fetch = FetchDescriptor<MessageData>()
             if let msg = try modelContext.fetch(fetch).first(where: { $0.id == payload.messageId }) {
                 msg.status = payload.status
+                if payload.status == "read" { msg.isRead = true }
                 try modelContext.save()
             }
         } catch {
@@ -556,6 +557,7 @@ struct ChatView: View {
         }
         if let idx = visibleMessages.firstIndex(where: { $0.id == payload.messageId }) {
             visibleMessages[idx].status = payload.status
+            if payload.status == "read" { visibleMessages[idx].isRead = true }
         }
     }
     
@@ -611,6 +613,12 @@ struct MessageBubble: View {
     
     @State private var swipeOffset: CGFloat = 0
     
+    // Determine if this is the last outgoing message that is read
+    private var isLastOutgoingRead: Bool {
+        guard message.isSentBy(userId: currentUserId) else { return false }
+        return message.isRead
+    }
+
     var body: some View {
         HStack {
             if isFromCurrentUser {
@@ -695,6 +703,13 @@ struct MessageBubble: View {
                     if isFromCurrentUser {
                         statusIcon
                     }
+                }
+                // Read receipt label shown only for the most recent outgoing message
+                if isFromCurrentUser, isLastOutgoingRead {
+                    Text("Read")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .padding(.top, 2)
                 }
             }
             .offset(x: swipeOffset)
