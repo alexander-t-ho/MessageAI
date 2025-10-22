@@ -8,7 +8,7 @@
 import SwiftUI
 import SwiftData
 
-struct ChatView: View {
+struct ChatViewWS: View {
     let conversation: ConversationData
     
     @Environment(\.modelContext) private var modelContext
@@ -985,7 +985,7 @@ struct ForwardMessageView: View {
 
 #Preview {
     NavigationStack {
-        ChatView(conversation: ConversationData(
+        ChatViewWS(conversation: ConversationData(
             participantIds: ["user1", "user2"],
             participantNames: ["John Doe"]
         ))

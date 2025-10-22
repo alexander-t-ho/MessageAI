@@ -68,7 +68,7 @@ struct ConversationListView: View {
             }
             .navigationTitle("Messages")
             .navigationDestination(for: ConversationData.self) { convo in
-                ChatView(conversation: convo)
+                ChatViewWS(conversation: convo)
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
