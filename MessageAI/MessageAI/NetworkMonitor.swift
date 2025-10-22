@@ -17,7 +17,7 @@ final class NetworkMonitor: ObservableObject {
     
     var isOnlineEffective: Bool { isOnline && !simulateOffline }
     
-    private init() {
+    init() {
         monitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
                 self?.isOnline = path.status == .satisfied
