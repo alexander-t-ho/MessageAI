@@ -17,7 +17,7 @@ final class SyncService: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
-    init(webSocket: WebSocketService, modelContext: ModelContext, network: NetworkMonitor = NetworkMonitor.shared) {
+    init(webSocket: WebSocketService, modelContext: ModelContext, network: NetworkMonitor) {
         self.webSocket = webSocket
         self.modelContext = modelContext
         self.network = network

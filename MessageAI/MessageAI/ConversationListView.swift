@@ -16,7 +16,7 @@ struct ConversationListView: View {
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var networkToggle: Bool = false
-    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @StateObject private var networkMonitor = NetworkMonitor()
     @State private var syncService: SyncService?
     
     private var databaseService: DatabaseService {
@@ -57,7 +57,7 @@ struct ConversationListView: View {
                     // Conversation list
                     List {
                         ForEach(conversations) { conversation in
-                            NavigationLink(destination: ChatView(conversation: conversation)) {
+                            NavigationLink(value: conversation) {
                                 ConversationRow(conversation: conversation)
                             }
                         }
@@ -67,6 +67,9 @@ struct ConversationListView: View {
                 }
             }
             .navigationTitle("Messages")
+            .navigationDestination(for: ConversationData.self) { convo in
+                ChatView(conversation: convo)
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Toggle(isOn: $networkToggle) {
@@ -102,16 +105,16 @@ struct ConversationListView: View {
                 guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
                 handleIncomingMessage(payload)
             }
-            .onChange(of: networkMonitor.isOnlineEffective) { _, newVal in
+                    .onChange(of: networkMonitor.isOnlineEffective) { _, newVal in
                 guard newVal == true else { return }
-                if syncService == nil {
-                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
-                }
-                Task { await syncService?.processQueueIfPossible() }
+                        if syncService == nil {
+                            syncService = SyncService(webSocket: webSocketService, modelContext: modelContext, network: networkMonitor)
+                        }
+                        Task { await syncService?.processQueueIfPossible() }
             }
             .onAppear {
                 if syncService == nil {
-                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext, network: networkMonitor)
                 }
             }
         }

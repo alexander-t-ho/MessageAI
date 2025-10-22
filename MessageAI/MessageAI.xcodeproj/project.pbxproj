@@ -10,9 +10,22 @@
 		96D1CDAA2EA7390E00B0BD16 /* MessageAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MessageAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		967948A02EA8A63900B4E1BA /* Exceptions for "MessageAI" folder in "MessageAI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				ChatView.swift,
+			);
+			target = 96D1CDA92EA7390E00B0BD16 /* MessageAI */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96D1CDAC2EA7390E00B0BD16 /* MessageAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				967948A02EA8A63900B4E1BA /* Exceptions for "MessageAI" folder in "MessageAI" target */,
+			);
 			path = MessageAI;
 			sourceTree = "<group>";
 		};

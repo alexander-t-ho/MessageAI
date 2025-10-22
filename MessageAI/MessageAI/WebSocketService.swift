@@ -365,6 +365,7 @@ class WebSocketService: ObservableObject {
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
+            print("📤 Sending markRead for \(messageIds.count) messages in convo \(conversationId)")
             webSocketTask?.send(.string(json)) { error in
                 if let error = error { print("❌ markRead send error: \(error.localizedDescription)") }
             }
