@@ -22,6 +22,7 @@ struct Config {
     struct Endpoints {
         static let signup = "\(baseURL)/auth/signup"
         static let login = "\(baseURL)/auth/login"
+        static let searchUsers = "\(baseURL)/users/search"
     }
 }
 

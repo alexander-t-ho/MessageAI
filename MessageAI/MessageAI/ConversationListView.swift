@@ -221,8 +221,12 @@ struct ConversationRow: View {
 struct NewConversationView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var recipientName = ""
-    @State private var recipientId = ""
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    @State private var searchQuery = ""
+    @State private var searchResults: [UserSearchResult] = []
+    @State private var isSearching = false
+    @State private var selectedUser: UserSearchResult?
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -230,20 +234,108 @@ struct NewConversationView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("Recipient Name", text: $recipientName)
-                        .autocapitalization(.words)
+            VStack(spacing: 0) {
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
                     
-                    TextField("Recipient ID (for testing)", text: $recipientId)
+                    TextField("Search by name or email", text: $searchQuery)
                         .autocapitalization(.none)
+                        .textContentType(.name)
+                        .onChange(of: searchQuery) { oldValue, newValue in
+                            Task {
+                                await performSearch(query: newValue)
+                            }
+                        }
+                    
+                    if isSearching {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .scaleEffect(0.8)
+                    }
+                    
+                    if !searchQuery.isEmpty {
+                        Button(action: { searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                
+                // Search results or empty state
+                if searchQuery.isEmpty {
+                    VStack(spacing: 20) {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray.opacity(0.5))
+                            .padding(.top, 80)
+                        
+                        Text("Search for People")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        
+                        Text("Enter a name or email to find users")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                } else if searchResults.isEmpty && !isSearching {
+                    VStack(spacing: 20) {
+                        Image(systemName: "person.fill.questionmark")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray.opacity(0.5))
+                            .padding(.top, 80)
+                        
+                        Text("No Users Found")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        
+                        Text("Try a different name or email")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                } else {
+                    List(searchResults) { user in
+                        Button(action: {
+                            createConversation(with: user)
+                        }) {
+                            HStack(spacing: 12) {
+                                // Avatar
+                                Circle()
+                                    .fill(avatarColor(for: user.name))
+                                    .frame(width: 50, height: 50)
+                                    .overlay(
+                                        Text(user.name.prefix(1).uppercased())
+                                            .font(.title3)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(user.name)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text(user.email)
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    .listStyle(.plain)
                 }
                 
-                Section {
-                    Text("For testing: Use any name and ID to create a test conversation")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
+                Spacer()
             }
             .navigationTitle("New Conversation")
             .navigationBarTitleDisplayMode(.inline)
@@ -253,30 +345,70 @@ struct NewConversationView: View {
                         dismiss()
                     }
                 }
-                
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        createConversation()
-                    }
-                    .disabled(recipientName.isEmpty || recipientId.isEmpty)
-                }
             }
         }
     }
     
-    private func createConversation() {
-        // For testing: create a demo conversation
+    private func performSearch(query: String) async {
+        guard !query.isEmpty && query.count >= 2 else {
+            searchResults = []
+            return
+        }
+        
+        isSearching = true
+        
+        do {
+            // Small delay to avoid too many requests while typing
+            try await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+            
+            // Only search if query hasn't changed
+            guard searchQuery == query else { return }
+            
+            let results = try await NetworkService.shared.searchUsers(query: query)
+            
+            await MainActor.run {
+                // Filter out current user from results
+                if let currentUserId = authViewModel.currentUser?.id {
+                    searchResults = results.filter { $0.userId != currentUserId }
+                } else {
+                    searchResults = results
+                }
+                isSearching = false
+            }
+        } catch {
+            await MainActor.run {
+                print("❌ Search error: \(error)")
+                searchResults = []
+                isSearching = false
+            }
+        }
+    }
+    
+    private func createConversation(with user: UserSearchResult) {
+        guard let currentUser = authViewModel.currentUser else {
+            print("❌ No current user")
+            return
+        }
+        
+        // Create conversation with both participant IDs
         let conversation = ConversationData(
-            participantIds: ["current-user-id", recipientId],
-            participantNames: [recipientName]
+            participantIds: [currentUser.id, user.userId],
+            participantNames: [user.name] // Just store other user's name for display
         )
         
         do {
             try databaseService.saveConversation(conversation)
+            print("✅ Created conversation with \(user.name)")
             dismiss()
         } catch {
-            print("Error creating conversation: \(error)")
+            print("❌ Error creating conversation: \(error)")
         }
+    }
+    
+    private func avatarColor(for name: String) -> Color {
+        let colors: [Color] = [.blue, .purple, .green, .orange, .pink, .red]
+        let index = abs(name.hashValue % colors.count)
+        return colors[index]
     }
 }
 

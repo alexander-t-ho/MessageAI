@@ -120,5 +120,43 @@ class NetworkService {
             throw NetworkError.networkError(error)
         }
     }
+    
+    // MARK: - Search Users
+    func searchUsers(query: String) async throws -> [UserSearchResult] {
+        guard let url = URL(string: Config.Endpoints.searchUsers) else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let searchRequest = UserSearchRequest(searchQuery: query)
+        request.httpBody = try JSONEncoder().encode(searchRequest)
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NetworkError.invalidResponse
+            }
+            
+            if httpResponse.statusCode == 200 {
+                let searchResponse = try JSONDecoder().decode(UserSearchResponse.self, from: data)
+                print("🔍 Found \(searchResponse.count) users for query: \(query)")
+                return searchResponse.users
+            } else {
+                if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                    throw NetworkError.serverError(errorResponse.message)
+                } else {
+                    throw NetworkError.serverError("Search failed with status \(httpResponse.statusCode)")
+                }
+            }
+        } catch let error as NetworkError {
+            throw error
+        } catch {
+            throw NetworkError.networkError(error)
+        }
+    }
 }
 

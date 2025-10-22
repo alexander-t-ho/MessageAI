@@ -58,3 +58,22 @@ struct ErrorResponse: Codable {
     let details: String?
 }
 
+// MARK: - User Search
+struct UserSearchRequest: Codable {
+    let searchQuery: String
+}
+
+struct UserSearchResponse: Codable {
+    let success: Bool
+    let users: [UserSearchResult]
+    let count: Int
+}
+
+struct UserSearchResult: Codable, Identifiable {
+    let userId: String
+    let name: String
+    let email: String
+    
+    var id: String { userId }
+}
+
