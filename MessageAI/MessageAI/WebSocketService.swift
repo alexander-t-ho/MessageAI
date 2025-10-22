@@ -56,6 +56,12 @@ struct DeletePayload: Codable {
     let conversationId: String
 }
 
+struct MessageStatusPayload: Codable {
+    let messageId: String
+    let conversationId: String
+    let status: String // delivered | read
+}
+
 /// WebSocket Service - Manages real-time messaging connection
 @MainActor
 class WebSocketService: ObservableObject {
@@ -65,6 +71,7 @@ class WebSocketService: ObservableObject {
     @Published var connectionState: WebSocketState = .disconnected
     @Published var receivedMessages: [MessagePayload] = []
     @Published var deletedMessages: [DeletePayload] = []
+    @Published var statusUpdates: [MessageStatusPayload] = []
     @Published var userPresence: [String: Bool] = [:] // userId -> online
     
     // MARK: - Private Properties
@@ -325,6 +332,10 @@ class WebSocketService: ObservableObject {
                           let deleteData = json["data"] as? [String: Any] {
                     let payload = try JSONDecoder().decode(DeletePayload.self, from: JSONSerialization.data(withJSONObject: deleteData))
                     deletedMessages.append(payload)
+                } else if let type = json["type"] as? String, type == "messageStatus",
+                          let statusData = json["data"] as? [String: Any] {
+                    let payload = try JSONDecoder().decode(MessageStatusPayload.self, from: JSONSerialization.data(withJSONObject: statusData))
+                    statusUpdates.append(payload)
                 } else if let type = json["type"] as? String, type == "presence",
                           let presence = json["data"] as? [String: Any],
                           let userId = presence["userId"] as? String,
@@ -337,6 +348,24 @@ class WebSocketService: ObservableObject {
             }
         } catch {
             print("❌ Error parsing message: \(error.localizedDescription)")
+        }
+    }
+
+    // Send markRead for a batch of messages in a conversation
+    func sendMarkRead(conversationId: String, readerId: String, messageIds: [String]) {
+        guard connectionState == .connected else { return }
+        guard !messageIds.isEmpty else { return }
+        let payload: [String: Any] = [
+            "action": "markRead",
+            "conversationId": conversationId,
+            "readerId": readerId,
+            "messageIds": messageIds
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error { print("❌ markRead send error: \(error.localizedDescription)") }
+            }
         }
     }
 

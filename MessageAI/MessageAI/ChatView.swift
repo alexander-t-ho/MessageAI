@@ -111,6 +111,14 @@ struct ChatView: View {
                     
                     // Load draft
                     loadDraft()
+
+                    // Phase 6: Mark visible incoming messages as read
+                    let unreadIds = visibleMessages
+                        .filter { !$0.isSentBy(userId: currentUserId) && $0.status != "read" }
+                        .map { $0.id }
+                    if !unreadIds.isEmpty {
+                        webSocketService.sendMarkRead(conversationId: conversation.id, readerId: currentUserId, messageIds: unreadIds)
+                    }
                 }
             }
             
@@ -210,6 +218,11 @@ struct ChatView: View {
         .onChange(of: webSocketService.deletedMessages.count) { old, new in
             if new > old, let payload = webSocketService.deletedMessages.last {
                 handleDeletedMessage(payload)
+            }
+        }
+        .onChange(of: webSocketService.statusUpdates.count) { old, new in
+            if new > old, let payload = webSocketService.statusUpdates.last {
+                handleStatusUpdate(payload)
             }
         }
     }
@@ -498,6 +511,11 @@ struct ChatView: View {
             try modelContext.save()
             
             print("✅ Message added to conversation")
+
+            // Phase 6: Immediately mark as read for messages received in the open chat
+            if payload.senderId != currentUserId {
+                webSocketService.sendMarkRead(conversationId: conversation.id, readerId: currentUserId, messageIds: [payload.messageId])
+            }
         } catch {
             print("❌ Error saving received message: \(error)")
         }
@@ -519,6 +537,23 @@ struct ChatView: View {
         }
         withAnimation {
             visibleMessages.removeAll { $0.id == payload.messageId }
+        }
+    }
+
+    private func handleStatusUpdate(_ payload: MessageStatusPayload) {
+        guard payload.conversationId == conversation.id else { return }
+        // Update local DB and visible array
+        do {
+            let fetch = FetchDescriptor<MessageData>()
+            if let msg = try modelContext.fetch(fetch).first(where: { $0.id == payload.messageId }) {
+                msg.status = payload.status
+                try modelContext.save()
+            }
+        } catch {
+            print("❌ Error applying status update: \(error)")
+        }
+        if let idx = visibleMessages.firstIndex(where: { $0.id == payload.messageId }) {
+            visibleMessages[idx].status = payload.status
         }
     }
     
