@@ -13,6 +13,8 @@ struct ConversationListView: View {
     @Query(sort: \ConversationData.lastMessageTime, order: .reverse) private var conversations: [ConversationData]
     @State private var showNewChat = false
     @State private var selectedConversation: ConversationData?
+    @EnvironmentObject var webSocketService: WebSocketService
+    @EnvironmentObject var authViewModel: AuthViewModel
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -73,6 +75,10 @@ struct ConversationListView: View {
             .sheet(isPresented: $showNewChat) {
                 NewConversationView()
             }
+            .onChange(of: webSocketService.receivedMessages.count) { oldValue, newValue in
+                guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
+                handleIncomingMessage(payload)
+            }
         }
     }
     
@@ -84,6 +90,31 @@ struct ConversationListView: View {
             } catch {
                 print("Error deleting conversation: \(error)")
             }
+        }
+    }
+}
+
+extension ConversationListView {
+    private func handleIncomingMessage(_ payload: MessagePayload) {
+        // Ensure this device is the intended recipient
+        guard payload.recipientId == authViewModel.currentUser?.id else { return }
+        
+        let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
+        
+        // Find existing conversation or create a minimal one
+        if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
+            existing.lastMessage = payload.content
+            existing.lastMessageTime = timestamp
+            do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
+        } else {
+            let convo = ConversationData(
+                id: payload.conversationId,
+                participantIds: [payload.senderId, payload.recipientId],
+                participantNames: [payload.senderName],
+                lastMessage: payload.content,
+                lastMessageTime: timestamp
+            )
+            do { try databaseService.saveConversation(convo) } catch { print("❌ Error creating conversation: \(error)") }
         }
     }
 }
