@@ -12,6 +12,7 @@ struct ChatView: View {
     let conversation: ConversationData
     
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var webSocketService: WebSocketService
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
@@ -25,6 +26,21 @@ struct ChatView: View {
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
+    }
+    
+    // Get current user ID from auth
+    private var currentUserId: String {
+        authViewModel.currentUser?.id ?? "unknown-user"
+    }
+    
+    // Get current user name from auth
+    private var currentUserName: String {
+        authViewModel.currentUser?.name ?? "You"
+    }
+    
+    // Get recipient ID (other participant in conversation)
+    private var recipientId: String {
+        conversation.participantIds.first { $0 != currentUserId } ?? "unknown-recipient"
     }
     
     // Computed messages from query (for reference)
@@ -190,8 +206,8 @@ struct ChatView: View {
         // Create message locally first (optimistic update)
         let message = MessageData(
             conversationId: conversation.id,
-            senderId: "current-user-id", // TODO: Replace with actual user ID in Phase 4
-            senderName: "You", // TODO: Replace with actual user name in Phase 4
+            senderId: currentUserId,
+            senderName: currentUserName,
             content: text,
             timestamp: Date(),
             status: "sending",
@@ -219,13 +235,13 @@ struct ChatView: View {
             replyingToMessage = nil
             try databaseService.deleteDraft(for: conversation.id)
             
-            // Phase 4: Send via WebSocket
+            // Phase 4: Send via WebSocket with real user IDs
             webSocketService.sendMessage(
                 messageId: message.id,
                 conversationId: conversation.id,
-                senderId: "current-user-id", // TODO: Replace with actual Cognito user ID
-                senderName: "You", // TODO: Replace with actual user name
-                recipientId: "recipient-user-id", // TODO: Get from conversation
+                senderId: currentUserId,
+                senderName: currentUserName,
+                recipientId: recipientId,
                 content: text,
                 timestamp: Date(),
                 replyToMessageId: replyingToMessage?.id,
