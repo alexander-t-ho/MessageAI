@@ -244,8 +244,8 @@ struct DatabaseTestView: View {
             conversationId: "test-conversation-1",
             senderId: "current-user",
             senderName: "You",
-            content: testMessage,
-            isSentByCurrentUser: true
+            content: testMessage
+            // isSentByCurrentUser removed - computed dynamically now
         )
         
         do {
@@ -329,8 +329,8 @@ struct DatabaseTestView: View {
                     senderId: i % 2 == 0 ? "current-user" : "other-user",
                     senderName: i % 2 == 0 ? "You" : "Friend",
                     content: "Test message number \(i)",
-                    timestamp: Date().addingTimeInterval(Double(i)),
-                    isSentByCurrentUser: i % 2 == 0
+                    timestamp: Date().addingTimeInterval(Double(i))
+                    // isSentByCurrentUser removed - computed dynamically now
                 )
                 try databaseService.saveMessage(message)
             }
@@ -411,7 +411,7 @@ struct MessageRow: View {
                 Text(message.senderName)
                     .font(.caption)
                     .fontWeight(.bold)
-                    .foregroundColor(message.isSentByCurrentUser ? .blue : .green)
+                    .foregroundColor(message.isSentBy(userId: "current-user") ? .blue : .green)
                 
                 Spacer()
                 
