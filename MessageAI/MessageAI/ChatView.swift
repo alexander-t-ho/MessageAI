@@ -237,6 +237,14 @@ struct ChatView: View {
             try databaseService.deleteDraft(for: conversation.id)
             
             // Phase 4: Send via WebSocket with real user IDs
+            print("🚀🚀🚀 SENDING MESSAGE VIA WEBSOCKET:")
+            print("   Sender ID: \(currentUserId)")
+            print("   Sender Name: \(currentUserName)")
+            print("   Recipient ID: \(recipientId)")
+            print("   Conversation ID: \(conversation.id)")
+            print("   Participant IDs: \(conversation.participantIds)")
+            print("🚀🚀🚀")
+            
             webSocketService.sendMessage(
                 messageId: message.id,
                 conversationId: conversation.id,
