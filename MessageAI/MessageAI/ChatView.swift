@@ -349,13 +349,15 @@ struct ChatView: View {
                 )
             }
             
-            // Mark as sent after brief delay (will be updated by delivery receipt)
+            // Mark as sent after brief delay, but only if still sending
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                message.status = "sent"
-                do {
-                    try modelContext.save()
-                } catch {
-                    print("Error updating message status: \(error)")
+                if message.status == "sending" { // avoid overwriting delivered/read
+                    message.status = "sent"
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        print("Error updating message status: \(error)")
+                    }
                 }
                 isLoading = false
             }
@@ -765,7 +767,7 @@ struct MessageBubble: View {
                 .font(.caption2)
                 .foregroundColor(.gray)
         case "delivered":
-            Image(systemName: "checkmark")
+            Image(systemName: "checkmark.checkmark")
                 .font(.caption2)
                 .foregroundColor(.blue)
         case "read":

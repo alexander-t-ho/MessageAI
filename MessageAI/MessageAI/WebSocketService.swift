@@ -335,6 +335,7 @@ class WebSocketService: ObservableObject {
                 } else if let type = json["type"] as? String, type == "messageStatus",
                           let statusData = json["data"] as? [String: Any] {
                     let payload = try JSONDecoder().decode(MessageStatusPayload.self, from: JSONSerialization.data(withJSONObject: statusData))
+                    print("📬 Status update received: \\n   id=\(payload.messageId) status=\(payload.status)")
                     statusUpdates.append(payload)
                 } else if let type = json["type"] as? String, type == "presence",
                           let presence = json["data"] as? [String: Any],

@@ -32,6 +32,7 @@ struct ContentView: View {
                     }
                     .onAppear {
                         // Connect to WebSocket when user is authenticated
+                        // Connect to WebSocket when user is authenticated
                         if let userId = authViewModel.currentUser?.id {
                             print("🔌 Connecting to WebSocket with userId: \(userId)")
                             webSocketService.connect(userId: userId)
