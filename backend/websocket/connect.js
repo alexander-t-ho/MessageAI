@@ -5,7 +5,8 @@
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -43,12 +44,54 @@ export const handler = async (event) => {
         }));
         
         console.log(`✅ Connection saved: ${connectionId} for user: ${userId}`);
-        
+
+        // Catch-up delivery: query undelivered (saved) messages for this user (last N)
+        try {
+            const api = new ApiGatewayManagementApiClient({
+                region: process.env.AWS_REGION || 'us-east-1',
+                endpoint: `https://${event.requestContext.domainName}/${event.requestContext.stage}`
+            });
+            const messagesTable = process.env.MESSAGES_TABLE || 'Messages_AlexHo';
+            const resp = await docClient.send(new QueryCommand({
+                TableName: messagesTable,
+                IndexName: 'recipientId-index',
+                KeyConditionExpression: 'recipientId = :r',
+                ExpressionAttributeValues: { ':r': userId },
+                ScanIndexForward: true,
+                Limit: 25
+            }));
+            for (const m of (resp.Items || [])) {
+                // Skip deleted
+                if (m.isDeleted) continue;
+                await api.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: Buffer.from(JSON.stringify({
+                        type: 'message',
+                        data: {
+                            messageId: m.messageId,
+                            conversationId: m.conversationId,
+                            senderId: m.senderId,
+                            senderName: m.senderName,
+                            content: m.content,
+                            timestamp: m.timestamp,
+                            status: 'delivered',
+                            replyToMessageId: m.replyToMessageId || null,
+                            replyToContent: m.replyToContent || null,
+                            replyToSenderName: m.replyToSenderName || null
+                        }
+                    }))
+                }));
+            }
+        } catch (e) {
+            console.error('Catch-up delivery error:', e);
+        }
+
         return {
             statusCode: 200,
             body: JSON.stringify({ 
                 message: 'Connected',
-                connectionId: connectionId 
+                connectionId: connectionId,
+                userId
             })
         };
         

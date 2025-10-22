@@ -173,6 +173,23 @@ struct ChatView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .font(.headline)
+                    presenceDot
+                }
+                .contentShape(Rectangle())
+                .contextMenu {
+                    if isPeerOnline {
+                        Label("Active", systemImage: "circle.fill")
+                    } else {
+                        Label("Offline", systemImage: "circle")
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showForwardSheet) {
             if let message = messageToForward {
                 ForwardMessageView(
@@ -205,6 +222,22 @@ struct ChatView: View {
         } else {
             return conversation.participantNames.first ?? "Unknown"
         }
+    }
+    
+    private var isPeerOnline: Bool {
+        // Read peer presence from WebSocketService cache
+        webSocketService.userPresence[recipientId] ?? false
+    }
+    
+    @ViewBuilder private var presenceDot: some View {
+        Circle()
+            .fill(isPeerOnline ? Color.green : Color.clear)
+            .overlay(
+                Circle()
+                    .stroke(Color.gray.opacity(0.6), lineWidth: 1)
+            )
+            .frame(width: 10, height: 10)
+            .accessibilityLabel(isPeerOnline ? "Active" : "Offline")
     }
     
     private func loadDraft() {
@@ -271,27 +304,37 @@ struct ChatView: View {
             replyingToMessage = nil
             try databaseService.deleteDraft(for: conversation.id)
             
-            // Phase 4: Send via WebSocket with real user IDs
-            print("🚀🚀🚀 SENDING MESSAGE VIA WEBSOCKET:")
-            print("   Sender ID: \(currentUserId)")
-            print("   Sender Name: \(currentUserName)")
-            print("   Recipient ID: \(recipientId)")
-            print("   Conversation ID: \(conversation.id)")
-            print("   Participant IDs: \(conversation.participantIds)")
-            print("🚀🚀🚀")
-            
-            webSocketService.sendMessage(
-                messageId: message.id,
-                conversationId: conversation.id,
-                senderId: currentUserId,
-                senderName: currentUserName,
-                recipientId: recipientId,
-                content: text,
-                timestamp: Date(),
-                replyToMessageId: replyingToMessage?.id,
-                replyToContent: replyingToMessage?.content,
-                replyToSenderName: replyingToMessage?.senderName
-            )
+            // If offline or WS not connected, enqueue; else send immediately
+            let isConnected: Bool = {
+                if case .connected = webSocketService.connectionState { return true }
+                return false
+            }()
+                if !networkMonitor.isOnlineEffective || !isConnected {
+                // Enqueue for later send
+                let sync = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                sync.enqueue(message: message, recipientId: recipientId)
+                Task { await sync.processQueueIfPossible() }
+            } else {
+                print("🚀🚀🚀 SENDING MESSAGE VIA WEBSOCKET:")
+                print("   Sender ID: \(currentUserId)")
+                print("   Sender Name: \(currentUserName)")
+                print("   Recipient ID: \(recipientId)")
+                print("   Conversation ID: \(conversation.id)")
+                print("   Participant IDs: \(conversation.participantIds)")
+                print("🚀🚀🚀")
+                webSocketService.sendMessage(
+                    messageId: message.id,
+                    conversationId: conversation.id,
+                    senderId: currentUserId,
+                    senderName: currentUserName,
+                    recipientId: recipientId,
+                    content: text,
+                    timestamp: Date(),
+                    replyToMessageId: replyingToMessage?.id,
+                    replyToContent: replyingToMessage?.content,
+                    replyToSenderName: replyingToMessage?.senderName
+                )
+            }
             
             // Mark as sent after brief delay (will be updated by delivery receipt)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

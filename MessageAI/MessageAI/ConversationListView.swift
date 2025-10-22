@@ -15,6 +15,9 @@ struct ConversationListView: View {
     @State private var selectedConversation: ConversationData?
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var networkToggle: Bool = false
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @State private var syncService: SyncService?
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -65,6 +68,26 @@ struct ConversationListView: View {
             }
             .navigationTitle("Messages")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Toggle(isOn: $networkToggle) {
+                        Image(systemName: networkToggle ? "icloud.slash" : "icloud")
+                    }
+                    .labelsHidden()
+                    .onChange(of: networkToggle) { _, newVal in
+                        NetworkMonitor.shared.simulateOffline = newVal
+                        if newVal {
+                            // Simulate offline: disconnect WS
+                            webSocketService.disconnect()
+                        } else {
+                            // Simulate online: reconnect WS and mark presence online
+                            if let uid = authViewModel.currentUser?.id {
+                                webSocketService.connect(userId: uid)
+                                webSocketService.sendPresence(isOnline: true)
+                            }
+                        }
+                    }
+                    .accessibilityLabel("Simulate Offline")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showNewChat = true }) {
                         Image(systemName: "square.and.pencil")
@@ -78,6 +101,18 @@ struct ConversationListView: View {
             .onChange(of: webSocketService.receivedMessages.count) { oldValue, newValue in
                 guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
                 handleIncomingMessage(payload)
+            }
+            .onChange(of: networkMonitor.isOnlineEffective) { _, newVal in
+                guard newVal == true else { return }
+                if syncService == nil {
+                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                }
+                Task { await syncService?.processQueueIfPossible() }
+            }
+            .onAppear {
+                if syncService == nil {
+                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                }
             }
         }
     }

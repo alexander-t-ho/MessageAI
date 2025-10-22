@@ -65,6 +65,7 @@ class WebSocketService: ObservableObject {
     @Published var connectionState: WebSocketState = .disconnected
     @Published var receivedMessages: [MessagePayload] = []
     @Published var deletedMessages: [DeletePayload] = []
+    @Published var userPresence: [String: Bool] = [:] // userId -> online
     
     // MARK: - Private Properties
     
@@ -112,6 +113,10 @@ class WebSocketService: ObservableObject {
     /// Disconnect from WebSocket
     func disconnect() {
         print("🔌 Disconnecting from WebSocket...")
+        // Broadcast presence offline before disconnect if currently connected
+        if case .connected = connectionState {
+            sendPresence(isOnline: false)
+        }
         shouldReconnect = false
         reconnectTimer?.invalidate()
         reconnectTimer = nil
@@ -247,6 +252,8 @@ class WebSocketService: ObservableObject {
         reconnectAttempt = 0
         
         print("✅ Connected to WebSocket")
+        // Announce presence online after connecting
+        sendPresence(isOnline: true)
     }
     
     /// Receive messages from WebSocket
@@ -318,6 +325,11 @@ class WebSocketService: ObservableObject {
                           let deleteData = json["data"] as? [String: Any] {
                     let payload = try JSONDecoder().decode(DeletePayload.self, from: JSONSerialization.data(withJSONObject: deleteData))
                     deletedMessages.append(payload)
+                } else if let type = json["type"] as? String, type == "presence",
+                          let presence = json["data"] as? [String: Any],
+                          let userId = presence["userId"] as? String,
+                          let isOnline = presence["isOnline"] as? Bool {
+                    userPresence[userId] = isOnline
                     
                 } else {
                     print("⚠️ Unknown message format: \(json)")
@@ -325,6 +337,23 @@ class WebSocketService: ObservableObject {
             }
         } catch {
             print("❌ Error parsing message: \(error.localizedDescription)")
+        }
+    }
+
+    // Presence broadcast
+    func sendPresence(isOnline: Bool) {
+        guard connectionState == .connected else { return }
+        guard let uid = self.userId else { return }
+        let payload: [String: Any] = [
+            "action": "presenceUpdate",
+            "userId": uid,
+            "isOnline": isOnline
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error { print("❌ Presence send error: \(error.localizedDescription)") }
+            }
         }
     }
     
