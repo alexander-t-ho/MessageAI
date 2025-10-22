@@ -183,7 +183,11 @@ struct ConversationRow: View {
             return conversation.groupName ?? "Group Chat"
         } else {
             // Get other participant's name (not current user)
-            return conversation.participantNames.first ?? "Unknown"
+            // Safety: Handle empty participantNames array
+            guard !conversation.participantNames.isEmpty else {
+                return "Unknown User"
+            }
+            return conversation.participantNames.first ?? "Unknown User"
         }
     }
     
