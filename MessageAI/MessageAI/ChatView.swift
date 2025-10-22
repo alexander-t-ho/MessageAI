@@ -64,6 +64,7 @@ struct ChatView: View {
                         ForEach(visibleMessages) { message in
                             MessageBubble(
                                 message: message,
+                                currentUserId: currentUserId, // Pass current user ID for bubble placement
                                 onReply: { replyToMessage(message) },
                                 onDelete: { deleteMessage(message) },
                                 onEmphasize: { toggleEmphasis(message) },
@@ -211,7 +212,7 @@ struct ChatView: View {
             content: text,
             timestamp: Date(),
             status: "sending",
-            isSentByCurrentUser: true,
+            // No longer passing isSentByCurrentUser - it's computed dynamically!
             replyToMessageId: replyingToMessage?.id,
             replyToContent: replyingToMessage?.content,
             replyToSenderName: replyingToMessage?.senderName
@@ -372,8 +373,7 @@ struct ChatView: View {
         let timestamp = formatter.date(from: payload.timestamp) ?? Date()
         
         // Create MessageData from payload
-        // Check if this message was sent by current user (for correct bubble placement)
-        let isSentByMe = payload.senderId == currentUserId
+        // No longer need to compute isSentByCurrentUser - MessageBubble will do it!
         
         let newMessage = MessageData(
             conversationId: payload.conversationId,
@@ -382,7 +382,7 @@ struct ChatView: View {
             content: payload.content,
             timestamp: timestamp,
             status: payload.status,
-            isSentByCurrentUser: isSentByMe,
+            // isSentByCurrentUser removed - computed dynamically by MessageBubble
             replyToMessageId: payload.replyToMessageId,
             replyToContent: payload.replyToContent,
             replyToSenderName: payload.replyToSenderName
@@ -416,8 +416,8 @@ struct ChatView: View {
             senderName: "You",
             content: message.content,
             timestamp: Date(),
-            status: "sending",
-            isSentByCurrentUser: true
+            status: "sending"
+            // isSentByCurrentUser removed - computed dynamically
         )
         
         do {
@@ -451,6 +451,7 @@ struct ChatView: View {
 
 struct MessageBubble: View {
     let message: MessageData
+    let currentUserId: String // ✅ Added to determine bubble placement
     let onReply: () -> Void
     let onDelete: () -> Void
     let onEmphasize: () -> Void
@@ -600,7 +601,7 @@ struct MessageBubble: View {
     }
     
     private var isFromCurrentUser: Bool {
-        message.senderId == "current-user-id" // TODO: Replace with actual user ID
+        message.isSentBy(userId: currentUserId) // ✅ Now uses real current user ID!
     }
     
     @ViewBuilder
