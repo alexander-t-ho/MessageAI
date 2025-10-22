@@ -96,10 +96,27 @@ struct ConversationListView: View {
 
 extension ConversationListView {
     private func handleIncomingMessage(_ payload: MessagePayload) {
-        // Ensure this device is the intended recipient
-        guard payload.recipientId == authViewModel.currentUser?.id else { return }
+        // Ignore messages that originate from this device's user (defensive)
+        if payload.senderId == authViewModel.currentUser?.id { return }
         
         let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
+        
+        // Save the message locally (avoid duplicates)
+        let alreadyExists = try? modelContext.fetch(FetchDescriptor<MessageData>()).contains { $0.id == payload.messageId }
+        if alreadyExists == false {
+            let message = MessageData(
+                conversationId: payload.conversationId,
+                senderId: payload.senderId,
+                senderName: payload.senderName,
+                content: payload.content,
+                timestamp: timestamp,
+                status: payload.status,
+                replyToMessageId: payload.replyToMessageId,
+                replyToContent: payload.replyToContent,
+                replyToSenderName: payload.replyToSenderName
+            )
+            do { try databaseService.saveMessage(message) } catch { print("❌ Error saving incoming message: \(error)") }
+        }
         
         // Find existing conversation or create a minimal one
         if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
@@ -107,9 +124,10 @@ extension ConversationListView {
             existing.lastMessageTime = timestamp
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
+            let myUserId = authViewModel.currentUser?.id ?? "unknown-user"
             let convo = ConversationData(
                 id: payload.conversationId,
-                participantIds: [payload.senderId, payload.recipientId],
+                participantIds: [payload.senderId, myUserId],
                 participantNames: [payload.senderName],
                 lastMessage: payload.content,
                 lastMessageTime: timestamp
