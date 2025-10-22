@@ -151,7 +151,12 @@ class WebSocketService: ObservableObject {
         
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: payload)
-            let message = URLSessionWebSocketTask.Message.data(jsonData)
+            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                print("❌ Failed to convert payload to string")
+                return
+            }
+            
+            let message = URLSessionWebSocketTask.Message.string(jsonString)
             
             webSocketTask?.send(message) { error in
                 Task { @MainActor in
