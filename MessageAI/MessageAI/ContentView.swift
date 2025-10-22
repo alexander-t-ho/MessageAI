@@ -18,7 +18,7 @@ struct ContentView: View {
         print("🚨 IF YOU SEE THIS, YOUR CONSOLE IS OPEN! 🚨")
         print("🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨")
     }
-    
+
     var body: some View {
         let _ = print("👁️ ContentView body rendered")
         return Group {
@@ -26,6 +26,10 @@ struct ContentView: View {
                 HomeView()
                     .environmentObject(authViewModel)
                     .environmentObject(webSocketService)
+                    // Reset in-memory dedupe on foreground so session remains fresh
+                    .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                        print("🔄 App to foreground - ready to receive messages")
+                    }
                     .onAppear {
                         // Connect to WebSocket when user is authenticated
                         if let userId = authViewModel.currentUser?.id {

@@ -102,9 +102,10 @@ extension ConversationListView {
         let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
         
         // Save the message locally (avoid duplicates)
-        let alreadyExists = try? modelContext.fetch(FetchDescriptor<MessageData>()).contains { $0.id == payload.messageId }
-        if alreadyExists == false {
+        let exists = (try? modelContext.fetch(FetchDescriptor<MessageData>()).contains { $0.id == payload.messageId }) ?? false
+        if !exists {
             let message = MessageData(
+                id: payload.messageId,
                 conversationId: payload.conversationId,
                 senderId: payload.senderId,
                 senderName: payload.senderName,

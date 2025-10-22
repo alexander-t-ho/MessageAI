@@ -51,6 +51,11 @@ struct MessagePayload: Codable {
     let replyToSenderName: String?
 }
 
+struct DeletePayload: Codable {
+    let messageId: String
+    let conversationId: String
+}
+
 /// WebSocket Service - Manages real-time messaging connection
 @MainActor
 class WebSocketService: ObservableObject {
@@ -59,6 +64,7 @@ class WebSocketService: ObservableObject {
     
     @Published var connectionState: WebSocketState = .disconnected
     @Published var receivedMessages: [MessagePayload] = []
+    @Published var deletedMessages: [DeletePayload] = []
     
     // MARK: - Private Properties
     
@@ -68,6 +74,7 @@ class WebSocketService: ObservableObject {
     private var shouldReconnect = true
     private let maxReconnectAttempts = 5
     private var reconnectAttempt = 0
+    private var seenMessageIds = Set<String>()
     
     // WebSocket URL from config
     private let webSocketURL: String
@@ -172,6 +179,39 @@ class WebSocketService: ObservableObject {
         }
     }
     
+    /// Send a delete-message event via WebSocket
+    func sendDeleteMessage(
+        messageId: String,
+        conversationId: String,
+        senderId: String,
+        recipientId: String
+    ) {
+        guard connectionState == .connected else {
+            print("❌ Cannot send delete - not connected")
+            return
+        }
+        let payload: [String: Any] = [
+            "action": "deleteMessage",
+            "messageId": messageId,
+            "conversationId": conversationId,
+            "senderId": senderId,
+            "recipientId": recipientId
+        ]
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            guard let json = String(data: data, encoding: .utf8) else { return }
+            let message = URLSessionWebSocketTask.Message.string(json)
+            webSocketTask?.send(message) { error in
+                Task { @MainActor in
+                    if let error = error { print("❌ Error sending delete: \(error.localizedDescription)") }
+                    else { print("✅ Delete sent via WebSocket: \(messageId)") }
+                }
+            }
+        } catch {
+            print("❌ Error serializing delete: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Private Methods
     
     /// Perform the actual WebSocket connection
@@ -261,12 +301,23 @@ class WebSocketService: ObservableObject {
                     // Parse message payload
                     let payload = try JSONDecoder().decode(MessagePayload.self, from: JSONSerialization.data(withJSONObject: messageData))
                     
+                    // De-duplicate by messageId
+                    if self.seenMessageIds.contains(payload.messageId) {
+                        return
+                    }
+                    self.seenMessageIds.insert(payload.messageId)
+                    
                     print("✅ New message received: \(payload.messageId)")
                     print("   From: \(payload.senderName)")
                     print("   Content: \(payload.content)")
                     
                     // Add to received messages
                     receivedMessages.append(payload)
+                    
+                } else if let type = json["type"] as? String, type == "messageDeleted",
+                          let deleteData = json["data"] as? [String: Any] {
+                    let payload = try JSONDecoder().decode(DeletePayload.self, from: JSONSerialization.data(withJSONObject: deleteData))
+                    deletedMessages.append(payload)
                     
                 } else {
                     print("⚠️ Unknown message format: \(json)")

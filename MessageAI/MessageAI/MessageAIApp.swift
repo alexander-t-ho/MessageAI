@@ -27,7 +27,8 @@ struct MessageAIApp: App {
             MessageData.self,
             ConversationData.self,
             ContactData.self,
-            DraftData.self
+            DraftData.self,
+            PendingMessageData.self
         ])
         
         let modelConfiguration = ModelConfiguration(

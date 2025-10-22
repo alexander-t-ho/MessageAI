@@ -157,3 +157,42 @@ enum MessageStatus: String, Codable {
     case failed = "failed"
 }
 
+// MARK: - Pending (Queued) Outgoing Message
+@Model
+final class PendingMessageData {
+    @Attribute(.unique) var id: String
+    var messageId: String
+    var conversationId: String
+    var senderId: String
+    var senderName: String
+    var recipientId: String
+    var content: String
+    var timestamp: Date
+    var retryCount: Int
+    var lastError: String?
+    
+    init(
+        id: String = UUID().uuidString,
+        messageId: String,
+        conversationId: String,
+        senderId: String,
+        senderName: String,
+        recipientId: String,
+        content: String,
+        timestamp: Date = Date(),
+        retryCount: Int = 0,
+        lastError: String? = nil
+    ) {
+        self.id = id
+        self.messageId = messageId
+        self.conversationId = conversationId
+        self.senderId = senderId
+        self.senderName = senderName
+        self.recipientId = recipientId
+        self.content = content
+        self.timestamp = timestamp
+        self.retryCount = retryCount
+        self.lastError = lastError
+    }
+}
+

@@ -16,6 +16,7 @@ struct ChatView: View {
     @EnvironmentObject var webSocketService: WebSocketService
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
+    @Query private var pendingAll: [PendingMessageData]
     @State private var messageText = ""
     @State private var isLoading = false
     @State private var replyingToMessage: MessageData? // Message being replied to
@@ -27,6 +28,8 @@ struct ChatView: View {
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
     }
+    
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     
     // Get current user ID from auth
     private var currentUserId: String {
@@ -53,6 +56,11 @@ struct ChatView: View {
     // Other conversations for forwarding
     private var otherConversations: [ConversationData] {
         allConversations.filter { $0.id != conversation.id }
+    }
+    
+    // Queued count for this conversation
+    private var queuedCount: Int {
+        pendingAll.filter { $0.conversationId == conversation.id }.count
     }
     
     var body: some View {
@@ -125,6 +133,28 @@ struct ChatView: View {
                         saveDraft(newValue)
                     }
                 
+                // Offline/Queue badge
+                if !networkMonitor.isOnline || queuedCount > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: networkMonitor.isOnline ? "arrow.triangle.2.circlepath" : "icloud.slash")
+                            .font(.system(size: 12, weight: .semibold))
+                        if queuedCount > 0 {
+                            Text("\(queuedCount)")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                        } else {
+                            Text("Offline")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color(.systemGray5)))
+                    .foregroundColor(.gray)
+                    .accessibilityLabel("Queued messages: \(queuedCount). \(networkMonitor.isOnline ? "Online" : "Offline")")
+                }
+                
                 Button(action: sendMessage) {
                     if isLoading {
                         ProgressView()
@@ -158,6 +188,11 @@ struct ChatView: View {
             // New message received via WebSocket
             if newCount > oldCount, let newMessage = webSocketService.receivedMessages.last {
                 handleReceivedMessage(newMessage)
+            }
+        }
+        .onChange(of: webSocketService.deletedMessages.count) { old, new in
+            if new > old, let payload = webSocketService.deletedMessages.last {
+                handleDeletedMessage(payload)
             }
         }
     }
@@ -336,6 +371,14 @@ struct ChatView: View {
                 visibleMessages = queriedMessages
             }
         }
+        
+        // Notify recipient via WebSocket
+        webSocketService.sendDeleteMessage(
+            messageId: message.id,
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            recipientId: recipientId
+        )
     }
     
     private func toggleEmphasis(_ message: MessageData) {
@@ -370,8 +413,8 @@ struct ChatView: View {
             return
         }
         
-        // Check if message already exists (avoid duplicates)
-        if visibleMessages.contains(where: { $0.id == payload.messageId }) {
+        // Check if message already exists in DB (avoid duplicates after relaunch)
+        if (try? modelContext.fetch(FetchDescriptor<MessageData>()).contains { $0.id == payload.messageId }) ?? false {
             print("   ⚠️ Message already exists, ignoring duplicate")
             return
         }
@@ -384,6 +427,7 @@ struct ChatView: View {
         // No longer need to compute isSentByCurrentUser - MessageBubble will do it!
         
         let newMessage = MessageData(
+            id: payload.messageId,
             conversationId: payload.conversationId,
             senderId: payload.senderId,
             senderName: payload.senderName,
@@ -413,6 +457,25 @@ struct ChatView: View {
             print("✅ Message added to conversation")
         } catch {
             print("❌ Error saving received message: \(error)")
+        }
+    }
+    
+    private func handleDeletedMessage(_ payload: DeletePayload) {
+        // Only handle deletes for this conversation
+        guard payload.conversationId == conversation.id else { return }
+        
+        // Update DB and UI
+        do {
+            let fetch = FetchDescriptor<MessageData>()
+            if let msg = try modelContext.fetch(fetch).first(where: { $0.id == payload.messageId }) {
+                msg.isDeleted = true
+                try modelContext.save()
+            }
+        } catch {
+            print("❌ Error applying delete: \(error)")
+        }
+        withAnimation {
+            visibleMessages.removeAll { $0.id == payload.messageId }
         }
     }
     
