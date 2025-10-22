@@ -19,6 +19,7 @@ struct ChatView: View {
     @Query private var pendingAll: [PendingMessageData]
     @State private var messageText = ""
     @State private var isLoading = false
+    @State private var suppressDraftSaves = false
     @State private var replyingToMessage: MessageData? // Message being replied to
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
@@ -29,7 +30,11 @@ struct ChatView: View {
         DatabaseService(modelContext: modelContext)
     }
     
-    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    // Treat connected WebSocket as online-effective for UI/queue decisions on phase-5
+    private var isOnlineEffective: Bool {
+        if case .connected = webSocketService.connectionState { return true }
+        return false
+    }
     
     // Get current user ID from auth
     private var currentUserId: String {
@@ -111,6 +116,18 @@ struct ChatView: View {
                     
                     // Load draft
                     loadDraft()
+
+                    // Phase 6 read receipts removed on phase-5 branch
+
+                    // Ensure WebSocket is connected when entering chat
+                    let isConnected: Bool = {
+                        if case .connected = webSocketService.connectionState { return true }
+                        return false
+                    }()
+                    if !webSocketService.simulateOffline && !isConnected, let uid = authViewModel.currentUser?.id {
+                        print("🔄 ChatView requesting WebSocket reconnect for userId: \(uid)")
+                        webSocketService.connect(userId: uid)
+                    }
                 }
             }
             
@@ -129,14 +146,15 @@ struct ChatView: View {
                     .lineLimit(1...6)
                     .focused($isInputFocused)
                     .onChange(of: messageText) { _, newValue in
-                        // Auto-save draft as user types
+                        // Avoid recreating a draft immediately after send
+                        guard !suppressDraftSaves else { return }
                         saveDraft(newValue)
                     }
                 
-                // Offline/Queue badge
-                if !networkMonitor.isOnline || queuedCount > 0 {
+                // Offline/Queue badge (based on WS connection)
+                if !isOnlineEffective || queuedCount > 0 {
                     HStack(spacing: 6) {
-                        Image(systemName: networkMonitor.isOnline ? "arrow.triangle.2.circlepath" : "icloud.slash")
+                        Image(systemName: isOnlineEffective ? "arrow.triangle.2.circlepath" : "icloud.slash")
                             .font(.system(size: 12, weight: .semibold))
                         if queuedCount > 0 {
                             Text("\(queuedCount)")
@@ -152,7 +170,7 @@ struct ChatView: View {
                     .padding(.vertical, 4)
                     .background(Capsule().fill(Color(.systemGray5)))
                     .foregroundColor(.gray)
-                    .accessibilityLabel("Queued messages: \(queuedCount). \(networkMonitor.isOnline ? "Online" : "Offline")")
+                    .accessibilityLabel("Queued messages: \(queuedCount). \(isOnlineEffective ? "Online" : "Offline")")
                 }
                 
                 Button(action: sendMessage) {
@@ -212,6 +230,7 @@ struct ChatView: View {
                 handleDeletedMessage(payload)
             }
         }
+        // No statusUpdates on phase-5
     }
     
     // MARK: - Helper Methods
@@ -271,6 +290,8 @@ struct ChatView: View {
         guard !text.isEmpty else { return }
         
         isLoading = true
+        // Prevent TextField change observers from saving a new draft during send
+        suppressDraftSaves = true
         
         // Create message locally first (optimistic update)
         let message = MessageData(
@@ -309,7 +330,7 @@ struct ChatView: View {
                 if case .connected = webSocketService.connectionState { return true }
                 return false
             }()
-                if !networkMonitor.isOnlineEffective || !isConnected {
+                if !isOnlineEffective || !isConnected {
                 // Enqueue for later send
                 let sync = SyncService(webSocket: webSocketService, modelContext: modelContext)
                 sync.enqueue(message: message, recipientId: recipientId)
@@ -336,20 +357,28 @@ struct ChatView: View {
                 )
             }
             
-            // Mark as sent after brief delay (will be updated by delivery receipt)
+            // Mark as sent after brief delay, but only if still sending
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                message.status = "sent"
-                do {
-                    try modelContext.save()
-                } catch {
-                    print("Error updating message status: \(error)")
+                if message.status == "sending" { // avoid overwriting delivered/read
+                    message.status = "sent"
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        print("Error updating message status: \(error)")
+                    }
                 }
                 isLoading = false
+                // Re-enable draft autosave shortly after send
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    suppressDraftSaves = false
+                }
             }
             
         } catch {
             print("Error sending message: \(error)")
             isLoading = false
+            // Ensure we re-enable drafts even if send fails synchronously
+            suppressDraftSaves = false
         }
     }
     
@@ -521,6 +550,8 @@ struct ChatView: View {
             visibleMessages.removeAll { $0.id == payload.messageId }
         }
     }
+
+    // No message status handler on phase-5
     
     private func forwardToConversation(_ message: MessageData, to targetConversation: ConversationData) {
         // Create a new message in the target conversation
@@ -574,6 +605,12 @@ struct MessageBubble: View {
     
     @State private var swipeOffset: CGFloat = 0
     
+    // Determine if this is the last outgoing message that is read
+    private var isLastOutgoingRead: Bool {
+        guard message.isSentBy(userId: currentUserId) else { return false }
+        return message.isRead
+    }
+
     var body: some View {
         HStack {
             if isFromCurrentUser {
@@ -659,6 +696,13 @@ struct MessageBubble: View {
                         statusIcon
                     }
                 }
+                // Read receipt label shown only for the most recent outgoing message
+                if isFromCurrentUser, isLastOutgoingRead {
+                    Text("Read")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .padding(.top, 2)
+                }
             }
             .offset(x: swipeOffset)
             } // Close ZStack
@@ -730,9 +774,13 @@ struct MessageBubble: View {
                 .font(.caption2)
                 .foregroundColor(.gray)
         case "delivered":
-            Image(systemName: "checkmark")
-                .font(.caption2)
-                .foregroundColor(.blue)
+            HStack(spacing: -4) {
+                Image(systemName: "checkmark")
+                Image(systemName: "checkmark")
+                    .offset(x: 4)
+            }
+            .font(.caption2)
+            .foregroundColor(.blue)
         case "read":
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption2)

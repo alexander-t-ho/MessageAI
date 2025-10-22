@@ -57,8 +57,9 @@ export const handler = async (event) => {
                 IndexName: 'recipientId-index',
                 KeyConditionExpression: 'recipientId = :r',
                 ExpressionAttributeValues: { ':r': userId },
-                ScanIndexForward: true,
-                Limit: 25
+                // newest first so most recent messages are delivered immediately
+                ScanIndexForward: false,
+                Limit: 100
             }));
             for (const m of (resp.Items || [])) {
                 // Skip deleted

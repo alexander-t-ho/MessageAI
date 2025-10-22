@@ -33,8 +33,12 @@ struct ContentView: View {
                     .onAppear {
                         // Connect to WebSocket when user is authenticated
                         if let userId = authViewModel.currentUser?.id {
-                            print("🔌 Connecting to WebSocket with userId: \(userId)")
-                            webSocketService.connect(userId: userId)
+                            if webSocketService.simulateOffline {
+                                print("⛔️ Simulated offline is ON; skipping initial WebSocket connect")
+                            } else {
+                                print("🔌 Connecting to WebSocket with userId: \(userId)")
+                                webSocketService.connect(userId: userId)
+                            }
                         }
                     }
                     .onDisappear {

@@ -16,7 +16,7 @@ struct ConversationListView: View {
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var networkToggle: Bool = false
-    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @State private var simulateOffline: Bool = false
     @State private var syncService: SyncService?
     
     private var databaseService: DatabaseService {
@@ -57,7 +57,7 @@ struct ConversationListView: View {
                     // Conversation list
                     List {
                         ForEach(conversations) { conversation in
-                            NavigationLink(destination: ChatView(conversation: conversation)) {
+                            NavigationLink(value: conversation) {
                                 ConversationRow(conversation: conversation)
                             }
                         }
@@ -67,23 +67,24 @@ struct ConversationListView: View {
                 }
             }
             .navigationTitle("Messages")
+            .navigationDestination(for: ConversationData.self) { convo in
+                ChatView(conversation: convo)
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Toggle(isOn: $networkToggle) {
-                        Image(systemName: networkToggle ? "icloud.slash" : "icloud")
+                    Toggle(isOn: $simulateOffline) {
+                        Image(systemName: simulateOffline ? "icloud.slash" : "icloud")
                     }
                     .labelsHidden()
-                    .onChange(of: networkToggle) { _, newVal in
-                        NetworkMonitor.shared.simulateOffline = newVal
+                    .onChange(of: simulateOffline) { newVal in
+                        print("🛜 Simulate Offline toggled -> \(newVal ? "ON" : "OFF")")
+                        webSocketService.simulateOffline = newVal
                         if newVal {
-                            // Simulate offline: disconnect WS
+                            print("🛜 Disconnecting WebSocket due to Simulate Offline ON")
                             webSocketService.disconnect()
-                        } else {
-                            // Simulate online: reconnect WS and mark presence online
-                            if let uid = authViewModel.currentUser?.id {
-                                webSocketService.connect(userId: uid)
-                                webSocketService.sendPresence(isOnline: true)
-                            }
+                        } else if let uid = authViewModel.currentUser?.id {
+                            print("🛜 Reconnecting WebSocket due to Simulate Offline OFF for userId: \(uid)")
+                            webSocketService.connect(userId: uid)
                         }
                     }
                     .accessibilityLabel("Simulate Offline")
@@ -102,17 +103,19 @@ struct ConversationListView: View {
                 guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
                 handleIncomingMessage(payload)
             }
-            .onChange(of: networkMonitor.isOnlineEffective) { _, newVal in
-                guard newVal == true else { return }
-                if syncService == nil {
-                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+            .onChange(of: webSocketService.connectionState) { _, state in
+                if case .connected = state {
+                    if syncService == nil {
+                        syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                    }
+                    Task { await syncService?.processQueueIfPossible() }
                 }
-                Task { await syncService?.processQueueIfPossible() }
             }
             .onAppear {
                 if syncService == nil {
                     syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
                 }
+                Task { await syncService?.processQueueIfPossible() }
             }
         }
     }

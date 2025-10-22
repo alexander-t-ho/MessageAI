@@ -134,7 +134,32 @@ export const handler = async (event) => {
             });
             
             await Promise.all(sendPromises);
-            
+            // Also send a delivery status ack back to sender's connections
+            try {
+                const senderConnections = await docClient.send(new QueryCommand({
+                    TableName: CONNECTIONS_TABLE,
+                    IndexName: 'userId-index',
+                    KeyConditionExpression: 'userId = :userId',
+                    ExpressionAttributeValues: { ':userId': senderId }
+                }));
+                const ackPromises = (senderConnections.Items || []).map(async (connection) => {
+                    try {
+                        await apiGateway.send(new PostToConnectionCommand({
+                            ConnectionId: connection.connectionId,
+                            Data: Buffer.from(JSON.stringify({
+                                type: 'messageStatus',
+                                data: { messageId, conversationId, status: 'delivered' }
+                            }))
+                        }));
+                    } catch (e) {
+                        console.error(`❌ Error sending delivery ack to ${connection.connectionId}:`, e);
+                    }
+                });
+                await Promise.all(ackPromises);
+            } catch (e) {
+                console.error('❌ Error querying/sending sender delivery ack:', e);
+            }
+
             return {
                 statusCode: 200,
                 body: JSON.stringify({
@@ -147,6 +172,36 @@ export const handler = async (event) => {
             // Recipient is offline - message saved to DB, will be delivered when they connect
             console.log(`📴 Recipient ${recipientId} is offline - message saved for later delivery`);
             
+            // Optional: send 'sent' ack to sender connections
+            try {
+                const apiGateway = new ApiGatewayManagementApiClient({
+                    region: process.env.AWS_REGION || 'us-east-1',
+                    endpoint: `https://${domain}/${stage}`
+                });
+                const senderConnections = await docClient.send(new QueryCommand({
+                    TableName: CONNECTIONS_TABLE,
+                    IndexName: 'userId-index',
+                    KeyConditionExpression: 'userId = :userId',
+                    ExpressionAttributeValues: { ':userId': senderId }
+                }));
+                const ackPromises = (senderConnections.Items || []).map(async (connection) => {
+                    try {
+                        await apiGateway.send(new PostToConnectionCommand({
+                            ConnectionId: connection.connectionId,
+                            Data: Buffer.from(JSON.stringify({
+                                type: 'messageStatus',
+                                data: { messageId, conversationId, status: 'sent' }
+                            }))
+                        }));
+                    } catch (e) {
+                        console.error(`❌ Error sending sent ack to ${connection.connectionId}:`, e);
+                    }
+                });
+                await Promise.all(ackPromises);
+            } catch (e) {
+                console.error('❌ Error sending sent ack:', e);
+            }
+
             return {
                 statusCode: 200,
                 body: JSON.stringify({

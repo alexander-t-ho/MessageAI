@@ -4,31 +4,19 @@
 //
 
 import Foundation
-import Combine
 import SwiftData
+import Combine
 
 @MainActor
 final class SyncService: ObservableObject {
     @Published private(set) var isSyncing = false
     
     private let webSocket: WebSocketService
-    private let network: NetworkMonitor
     private let modelContext: ModelContext
     
-    private var cancellables = Set<AnyCancellable>()
-    
-    init(webSocket: WebSocketService, modelContext: ModelContext, network: NetworkMonitor = NetworkMonitor.shared) {
+    init(webSocket: WebSocketService, modelContext: ModelContext) {
         self.webSocket = webSocket
         self.modelContext = modelContext
-        self.network = network
-        
-        // Observe network changes
-        network.$isOnline
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                Task { await self?.processQueueIfPossible() }
-            }
-            .store(in: &cancellables)
     }
     
     func enqueue(message: MessageData, recipientId: String) {
@@ -46,7 +34,6 @@ final class SyncService: ObservableObject {
     }
     
     func processQueueIfPossible() async {
-        guard network.isOnline else { return }
         guard case .connected = webSocket.connectionState else { return }
         
         isSyncing = true

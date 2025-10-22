@@ -56,6 +56,13 @@ struct DeletePayload: Codable {
     let conversationId: String
 }
 
+struct MessageStatusPayload: Codable {
+    let messageId: String
+    let conversationId: String
+    let status: String // delivered | read
+    let readerId: String?
+}
+
 /// WebSocket Service - Manages real-time messaging connection
 @MainActor
 class WebSocketService: ObservableObject {
@@ -65,7 +72,9 @@ class WebSocketService: ObservableObject {
     @Published var connectionState: WebSocketState = .disconnected
     @Published var receivedMessages: [MessagePayload] = []
     @Published var deletedMessages: [DeletePayload] = []
+    @Published var statusUpdates: [MessageStatusPayload] = []
     @Published var userPresence: [String: Bool] = [:] // userId -> online
+    @Published var simulateOffline: Bool = false // if true, never connect/send
     
     // MARK: - Private Properties
     
@@ -98,6 +107,10 @@ class WebSocketService: ObservableObject {
     
     /// Connect to WebSocket with user ID
     func connect(userId: String) {
+        guard !simulateOffline else {
+            print("⛔️ Simulated offline is ON; skipping connect")
+            return
+        }
         guard connectionState != .connected && connectionState != .connecting else {
             print("⚠️ Already connected or connecting")
             return
@@ -113,10 +126,7 @@ class WebSocketService: ObservableObject {
     /// Disconnect from WebSocket
     func disconnect() {
         print("🔌 Disconnecting from WebSocket...")
-        // Broadcast presence offline before disconnect if currently connected
-        if case .connected = connectionState {
-            sendPresence(isOnline: false)
-        }
+        // Presence broadcast disabled to avoid server errors
         shouldReconnect = false
         reconnectTimer?.invalidate()
         reconnectTimer = nil
@@ -221,6 +231,11 @@ class WebSocketService: ObservableObject {
     
     /// Perform the actual WebSocket connection
     private func performConnection() {
+        guard !simulateOffline else {
+            print("⛔️ Simulated offline is ON; not performing connection")
+            connectionState = .disconnected
+            return
+        }
         guard let userId = userId else {
             print("❌ Cannot connect - no user ID")
             return
@@ -252,8 +267,22 @@ class WebSocketService: ObservableObject {
         reconnectAttempt = 0
         
         print("✅ Connected to WebSocket")
-        // Announce presence online after connecting
-        sendPresence(isOnline: true)
+        // Presence broadcast disabled to avoid server errors
+
+        // Force catch-up on reconnect to ensure missed messages are delivered
+        if let uid = self.userId {
+            let payload: [String: Any] = [
+                "action": "catchUp",
+                "userId": uid
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: payload),
+               let json = String(data: data, encoding: .utf8) {
+                webSocketTask?.send(.string(json)) { error in
+                    if let error = error { print("❌ catchUp send error: \(error.localizedDescription)") }
+                    else { print("📦 catchUp requested for userId: \(uid)") }
+                }
+            }
+        }
     }
     
     /// Receive messages from WebSocket
@@ -325,6 +354,11 @@ class WebSocketService: ObservableObject {
                           let deleteData = json["data"] as? [String: Any] {
                     let payload = try JSONDecoder().decode(DeletePayload.self, from: JSONSerialization.data(withJSONObject: deleteData))
                     deletedMessages.append(payload)
+                } else if let type = json["type"] as? String, type == "messageStatus",
+                          let statusData = json["data"] as? [String: Any] {
+                    let payload = try JSONDecoder().decode(MessageStatusPayload.self, from: JSONSerialization.data(withJSONObject: statusData))
+                    print("📬 Status update received: \\n   id=\(payload.messageId) status=\(payload.status)")
+                    statusUpdates.append(payload)
                 } else if let type = json["type"] as? String, type == "presence",
                           let presence = json["data"] as? [String: Any],
                           let userId = presence["userId"] as? String,
@@ -340,21 +374,29 @@ class WebSocketService: ObservableObject {
         }
     }
 
-    // Presence broadcast
-    func sendPresence(isOnline: Bool) {
+    // Send markRead for a batch of messages in a conversation
+    func sendMarkRead(conversationId: String, readerId: String, messageIds: [String]) {
         guard connectionState == .connected else { return }
-        guard let uid = self.userId else { return }
+        guard !messageIds.isEmpty else { return }
         let payload: [String: Any] = [
-            "action": "presenceUpdate",
-            "userId": uid,
-            "isOnline": isOnline
+            "action": "markRead",
+            "conversationId": conversationId,
+            "readerId": readerId,
+            "messageIds": messageIds
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
+            print("📤 Sending markRead for \(messageIds.count) messages in convo \(conversationId)")
             webSocketTask?.send(.string(json)) { error in
-                if let error = error { print("❌ Presence send error: \(error.localizedDescription)") }
+                if let error = error { print("❌ markRead send error: \(error.localizedDescription)") }
             }
         }
+    }
+
+    // Presence broadcast
+    func sendPresence(isOnline: Bool) {
+        // Temporarily disabled to stabilize connection
+        return
     }
     
     /// Handle disconnection and attempt reconnect
@@ -364,7 +406,7 @@ class WebSocketService: ObservableObject {
         webSocketTask = nil
         
         // Attempt reconnection if enabled
-        if shouldReconnect && reconnectAttempt < maxReconnectAttempts {
+        if !simulateOffline && shouldReconnect && reconnectAttempt < maxReconnectAttempts {
             reconnectAttempt += 1
             let delay = min(pow(2.0, Double(reconnectAttempt)), 30.0) // Exponential backoff, max 30s
             
