@@ -8,7 +8,7 @@
 import SwiftUI
 import SwiftData
 
-struct ChatViewWS: View {
+struct ChatView: View {
     let conversation: ConversationData
     
     @Environment(\.modelContext) private var modelContext
@@ -324,7 +324,7 @@ struct ChatViewWS: View {
             }()
                 if !networkMonitor.isOnlineEffective || !isConnected {
                 // Enqueue for later send
-                let sync = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                let sync = SyncService(webSocket: webSocketService, modelContext: modelContext, network: networkMonitor)
                 sync.enqueue(message: message, recipientId: recipientId)
                 Task { await sync.processQueueIfPossible() }
             } else {
@@ -985,7 +985,7 @@ struct ForwardMessageView: View {
 
 #Preview {
     NavigationStack {
-        ChatViewWS(conversation: ConversationData(
+        ChatView(conversation: ConversationData(
             participantIds: ["user1", "user2"],
             participantNames: ["John Doe"]
         ))
