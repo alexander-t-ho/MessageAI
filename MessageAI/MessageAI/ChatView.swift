@@ -330,8 +330,6 @@ struct ChatView: View {
     }
     
     private func toggleEmphasis(_ message: MessageData) {
-        let currentUserId = "current-user-id" // TODO: Replace with actual user ID
-        
         if message.emphasizedBy.contains(currentUserId) {
             // Remove emphasis
             message.emphasizedBy.removeAll { $0 == currentUserId }
@@ -374,6 +372,9 @@ struct ChatView: View {
         let timestamp = formatter.date(from: payload.timestamp) ?? Date()
         
         // Create MessageData from payload
+        // Check if this message was sent by current user (for correct bubble placement)
+        let isSentByMe = payload.senderId == currentUserId
+        
         let newMessage = MessageData(
             conversationId: payload.conversationId,
             senderId: payload.senderId,
@@ -381,7 +382,7 @@ struct ChatView: View {
             content: payload.content,
             timestamp: timestamp,
             status: payload.status,
-            isSentByCurrentUser: false, // Message from other user
+            isSentByCurrentUser: isSentByMe,
             replyToMessageId: payload.replyToMessageId,
             replyToContent: payload.replyToContent,
             replyToSenderName: payload.replyToSenderName
@@ -411,7 +412,7 @@ struct ChatView: View {
         // Create a new message in the target conversation
         let forwardedMessage = MessageData(
             conversationId: targetConversation.id,
-            senderId: "current-user-id",
+            senderId: currentUserId,
             senderName: "You",
             content: message.content,
             timestamp: Date(),
