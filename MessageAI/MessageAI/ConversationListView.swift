@@ -141,6 +141,42 @@ struct ConversationListView: View {
                     syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
                 }
                 Task { await syncService?.processQueueIfPossible() }
+                
+                // Clean up any duplicate direct message conversations that should be groups
+                cleanupDuplicateConversations()
+            }
+        }
+    }
+    
+    private func cleanupDuplicateConversations() {
+        // Find all group conversations
+        let groupConvos = conversations.filter { $0.isGroupChat }
+        
+        guard !groupConvos.isEmpty else { return }
+        
+        print("🧹 Checking for duplicate conversations...")
+        
+        // For each group, check if there are any direct message conversations
+        // with messages that belong to the group
+        for groupConvo in groupConvos {
+            let groupMessages = (try? modelContext.fetch(FetchDescriptor<MessageData>())) ?? []
+            let messagesForGroup = groupMessages.filter { $0.conversationId == groupConvo.id }
+            
+            // Find any non-group conversations that might have the same participants
+            let duplicates = conversations.filter { convo in
+                !convo.isGroupChat &&
+                convo.id != groupConvo.id &&
+                Set(convo.participantIds).intersection(Set(groupConvo.participantIds)).count > 1
+            }
+            
+            // Delete duplicate conversations
+            for duplicate in duplicates {
+                print("🧹 Removing duplicate conversation: \(duplicate.id)")
+                do {
+                    try databaseService.deleteConversation(conversationId: duplicate.id)
+                } catch {
+                    print("❌ Error deleting duplicate: \(error)")
+                }
             }
         }
     }
@@ -199,21 +235,17 @@ extension ConversationListView {
             do { try databaseService.saveMessage(message) } catch { print("❌ Error saving incoming message: \(error)") }
         }
         
-        // Find existing conversation or create a minimal one
+        // Find existing conversation or wait for group creation
         if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
-            let myUserId = authViewModel.currentUser?.id ?? "unknown-user"
-            let convo = ConversationData(
-                id: payload.conversationId,
-                participantIds: [payload.senderId, myUserId],
-                participantNames: [payload.senderName],
-                lastMessage: payload.content,
-                lastMessageTime: timestamp
-            )
-            do { try databaseService.saveConversation(convo) } catch { print("❌ Error creating conversation: \(error)") }
+            // Don't auto-create conversation for messages
+            // Group conversations will be created by groupCreated event
+            // Direct message conversations are created when user initiates chat
+            print("⚠️ Received message for unknown conversation: \(payload.conversationId)")
+            print("   Waiting for group creation event or will create on user action")
         }
     }
     
@@ -240,6 +272,13 @@ extension ConversationListView {
             return
         }
         
+        // Check for any messages that arrived before the group was created
+        let existingMessages = (try? modelContext.fetch(FetchDescriptor<MessageData>())) ?? []
+        let groupMessages = existingMessages.filter { $0.conversationId == conversationId }
+        let lastMessage = groupMessages.sorted(by: { $0.timestamp < $1.timestamp }).last
+        
+        print("📦 Found \(groupMessages.count) existing messages for this group")
+        
         // Create new group conversation
         let conversation = ConversationData(
             id: conversationId,
@@ -247,9 +286,9 @@ extension ConversationListView {
             participantNames: participantNames,
             isGroupChat: true,
             groupName: groupName,
-            lastMessage: nil,
-            lastMessageTime: createdAt,
-            unreadCount: 0,
+            lastMessage: lastMessage?.content,
+            lastMessageTime: lastMessage?.timestamp ?? createdAt,
+            unreadCount: groupMessages.filter { $0.senderId != authViewModel.currentUser?.id }.count,
             createdBy: createdBy,
             createdByName: createdByName,
             createdAt: createdAt,
@@ -259,6 +298,7 @@ extension ConversationListView {
         do {
             try databaseService.saveConversation(conversation)
             print("✅ Group conversation created locally: \(groupName)")
+            print("   With \(groupMessages.count) messages and \(conversation.unreadCount) unread")
         } catch {
             print("❌ Error creating group conversation: \(error)")
         }
