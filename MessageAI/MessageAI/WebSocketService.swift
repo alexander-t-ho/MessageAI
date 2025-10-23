@@ -49,11 +49,20 @@ struct MessagePayload: Codable {
     let replyToMessageId: String?
     let replyToContent: String?
     let replyToSenderName: String?
+    let isEdited: Bool?
+    let editedAt: String?
 }
 
 struct DeletePayload: Codable {
     let messageId: String
     let conversationId: String
+}
+
+struct EditPayload: Codable {
+    let messageId: String
+    let conversationId: String
+    let newContent: String
+    let editedAt: String
 }
 
 struct MessageStatusPayload: Codable {
@@ -79,6 +88,7 @@ class WebSocketService: ObservableObject {
     @Published var connectionState: WebSocketState = .disconnected
     @Published var receivedMessages: [MessagePayload] = []
     @Published var deletedMessages: [DeletePayload] = []
+    @Published var editedMessages: [EditPayload] = []
     @Published var statusUpdates: [MessageStatusPayload] = []
     @Published var userPresence: [String: Bool] = [:] // userId -> online
     @Published var simulateOffline: Bool = false // if true, never connect/send
@@ -258,6 +268,53 @@ class WebSocketService: ObservableObject {
             }
         } catch {
             print("❌ Error serializing delete: \(error.localizedDescription)")
+        }
+    }
+    
+    func sendEditMessage(
+        messageId: String,
+        conversationId: String,
+        senderId: String,
+        senderName: String,
+        newContent: String,
+        recipientIds: [String],
+        isGroupChat: Bool
+    ) {
+        guard connectionState == .connected else {
+            print("❌ Cannot send edit - not connected")
+            return
+        }
+        
+        let editedAt = ISO8601DateFormatter().string(from: Date())
+        
+        let payload: [String: Any] = [
+            "action": "editMessage",
+            "messageId": messageId,
+            "conversationId": conversationId,
+            "senderId": senderId,
+            "senderName": senderName,
+            "newContent": newContent,
+            "recipientIds": recipientIds,
+            "isGroupChat": isGroupChat,
+            "editedAt": editedAt
+        ]
+        
+        print("📤 Sending edit for message: \(messageId)")
+        print("   New content: \(newContent)")
+        print("   Recipients: \(recipientIds.count)")
+        
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            guard let json = String(data: data, encoding: .utf8) else { return }
+            let message = URLSessionWebSocketTask.Message.string(json)
+            webSocketTask?.send(message) { error in
+                Task { @MainActor in
+                    if let error = error { print("❌ Error sending edit: \(error.localizedDescription)") }
+                    else { print("✅ Edit sent via WebSocket: \(messageId)") }
+                }
+            }
+        } catch {
+            print("❌ Error serializing edit: \(error.localizedDescription)")
         }
     }
     
@@ -539,6 +596,12 @@ class WebSocketService: ObservableObject {
                           let deleteData = json["data"] as? [String: Any] {
                     let payload = try JSONDecoder().decode(DeletePayload.self, from: JSONSerialization.data(withJSONObject: deleteData))
                     deletedMessages.append(payload)
+                } else if let type = json["type"] as? String, type == "messageEdited",
+                          let editData = json["data"] as? [String: Any] {
+                    print("✏️ Edit event received: \(editData)")
+                    let payload = try JSONDecoder().decode(EditPayload.self, from: JSONSerialization.data(withJSONObject: editData))
+                    print("✏️ Decoded edit: messageId=\(payload.messageId) newContent=\(payload.newContent)")
+                    editedMessages.append(payload)
                 } else if let type = json["type"] as? String, type == "messageStatus",
                           let statusData = json["data"] as? [String: Any] {
                     print("📬 Raw status data received: \(statusData)")

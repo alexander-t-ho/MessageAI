@@ -24,6 +24,9 @@ struct ChatView: View {
     @State private var replyingToMessage: MessageData? // Message being replied to
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
+    @State private var showEditSheet = false
+    @State private var messageToEdit: MessageData?
+    @State private var editText = ""
     @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
     @State private var isAtBottom: Bool = false // true when user is viewing the latest message
@@ -94,6 +97,7 @@ struct ChatView: View {
                                 onDelete: { deleteMessage(message) },
                                 onEmphasize: { toggleEmphasis(message) },
                                 onForward: { forwardMessage(message) },
+                                onEdit: { editMessage(message) },
                                 onTapReply: { scrollToMessage($0, proxy: proxy) }
                             )
                             .id(message.id)
@@ -387,6 +391,17 @@ struct ChatView: View {
                     .environmentObject(webSocketService)
             }
         }
+        .sheet(isPresented: $showEditSheet) {
+            EditMessageView(
+                editText: $editText,
+                onSave: saveEdit,
+                onCancel: {
+                    showEditSheet = false
+                    messageToEdit = nil
+                    editText = ""
+                }
+            )
+        }
         .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
             // New message received via WebSocket
             if newCount > oldCount, let newMessage = webSocketService.receivedMessages.last {
@@ -404,6 +419,11 @@ struct ChatView: View {
         .onChange(of: webSocketService.deletedMessages.count) { old, new in
             if new > old, let payload = webSocketService.deletedMessages.last {
                 handleDeletedMessage(payload)
+            }
+        }
+        .onChange(of: webSocketService.editedMessages.count) { old, new in
+            if new > old, let payload = webSocketService.editedMessages.last {
+                handleEditedMessage(payload)
             }
         }
         // After catch-up completes, force-scroll to bottom and mark all visible incoming as read
@@ -710,6 +730,86 @@ struct ChatView: View {
         )
     }
     
+    private func editMessage(_ message: MessageData) {
+        print("✏️ Edit triggered for message: \(message.id)")
+        print("   Current content: \(message.content)")
+        
+        // Only allow editing your own messages
+        guard message.senderId == currentUserId else {
+            print("   ❌ Cannot edit: not sender")
+            return
+        }
+        
+        // Cannot edit deleted messages
+        guard !message.isDeleted else {
+            print("   ❌ Cannot edit: message is deleted")
+            return
+        }
+        
+        // Set up editing state
+        messageToEdit = message
+        editText = message.content
+        showEditSheet = true
+    }
+    
+    private func saveEdit() {
+        guard let message = messageToEdit else { return }
+        guard !editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            // Don't allow empty edits
+            showEditSheet = false
+            return
+        }
+        
+        let trimmedText = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Don't save if content hasn't changed
+        guard trimmedText != message.content else {
+            showEditSheet = false
+            return
+        }
+        
+        print("💾 Saving edit for message: \(message.id)")
+        print("   Old: \(message.content)")
+        print("   New: \(trimmedText)")
+        
+        // Update local message
+        message.content = trimmedText
+        message.isEdited = true
+        message.editedAt = Date()
+        
+        // Update in visible messages
+        if let index = visibleMessages.firstIndex(where: { $0.id == message.id }) {
+            visibleMessages[index].content = trimmedText
+            visibleMessages[index].isEdited = true
+            visibleMessages[index].editedAt = Date()
+        }
+        
+        do {
+            try modelContext.save()
+            print("   ✅ Message edited in local database")
+            
+            // Trigger UI refresh
+            refreshTick += 1
+            
+            // Send edit to backend
+            webSocketService.sendEditMessage(
+                messageId: message.id,
+                conversationId: conversation.id,
+                senderId: currentUserId,
+                senderName: currentUserName,
+                newContent: trimmedText,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
+                isGroupChat: conversation.isGroupChat
+            )
+            
+            showEditSheet = false
+            messageToEdit = nil
+            editText = ""
+        } catch {
+            print("   ❌ Error editing message: \(error)")
+        }
+    }
+    
     private func toggleEmphasis(_ message: MessageData) {
         if message.emphasizedBy.contains(currentUserId) {
             // Remove emphasis
@@ -752,6 +852,7 @@ struct ChatView: View {
         // Parse timestamp
         let formatter = ISO8601DateFormatter()
         let timestamp = formatter.date(from: payload.timestamp) ?? Date()
+        let editedAt = payload.editedAt.flatMap { formatter.date(from: $0) }
         
         // Create MessageData from payload
         // No longer need to compute isSentByCurrentUser - MessageBubble will do it!
@@ -767,7 +868,9 @@ struct ChatView: View {
             // isSentByCurrentUser removed - computed dynamically by MessageBubble
             replyToMessageId: payload.replyToMessageId,
             replyToContent: payload.replyToContent,
-            replyToSenderName: payload.replyToSenderName
+            replyToSenderName: payload.replyToSenderName,
+            isEdited: payload.isEdited ?? false,
+            editedAt: editedAt
         )
         
         // Save to database
@@ -824,6 +927,45 @@ struct ChatView: View {
             }
         } catch {
             print("❌ Error applying delete: \(error)")
+        }
+    }
+    
+    private func handleEditedMessage(_ payload: EditPayload) {
+        // Only handle edits for this conversation
+        guard payload.conversationId == conversation.id else { return }
+        
+        print("✏️ Received edit notification for message: \(payload.messageId)")
+        print("   New content: \(payload.newContent)")
+        
+        // Update DB with edited content
+        do {
+            let fetch = FetchDescriptor<MessageData>()
+            if let msg = try modelContext.fetch(fetch).first(where: { $0.id == payload.messageId }) {
+                msg.content = payload.newContent
+                msg.isEdited = true
+                
+                // Parse editedAt timestamp
+                if let editedDate = ISO8601DateFormatter().date(from: payload.editedAt) {
+                    msg.editedAt = editedDate
+                }
+                
+                try modelContext.save()
+                print("   ✅ Message updated in database")
+                
+                // Update in visible messages
+                if let index = visibleMessages.firstIndex(where: { $0.id == payload.messageId }) {
+                    visibleMessages[index].content = payload.newContent
+                    visibleMessages[index].isEdited = true
+                    if let editedDate = ISO8601DateFormatter().date(from: payload.editedAt) {
+                        visibleMessages[index].editedAt = editedDate
+                    }
+                }
+                
+                // Trigger UI refresh
+                refreshTick += 1
+            }
+        } catch {
+            print("❌ Error applying edit: \(error)")
         }
     }
     
@@ -1051,6 +1193,7 @@ struct MessageBubble: View {
     let onDelete: () -> Void
     let onEmphasize: () -> Void
     let onForward: () -> Void
+    let onEdit: () -> Void
     let onTapReply: (String) -> Void
     
     @State private var swipeOffset: CGFloat = 0
@@ -1179,6 +1322,13 @@ struct MessageBubble: View {
                         statusIcon
                     }
                 }
+                // "Edited" label - shown for all users if message was edited
+                if message.isEdited && !isLastOutgoingRead {
+                    Text("Edited")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .padding(.top, 2)
+                }
                 // Read receipt with profile icons - shown only for the most recent outgoing message
                 if isFromCurrentUser, isLastOutgoingRead {
                     HStack(spacing: 6) {
@@ -1277,6 +1427,13 @@ struct MessageBubble: View {
                 )
                 .animation(.easeInOut(duration: 0.2), value: swipeOffset)
                 .contextMenu {
+                    // Edit option - only for sender's own messages
+                    if isFromCurrentUser && !message.isDeleted {
+                        Button(action: onEdit) {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                    }
+                    
                     Button(action: onEmphasize) {
                         Label(
                             message.isEmphasized ? "Remove Emphasis" : "Emphasize",
@@ -1599,6 +1756,54 @@ struct ForwardMessageView: View {
         let name = displayName(for: conversation)
         let index = abs(name.hashValue % colors.count)
         return colors[index]
+    }
+}
+
+// MARK: - Edit Message View
+
+struct EditMessageView: View {
+    @Binding var editText: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+    @FocusState private var isTextFieldFocused: Bool
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Edit area
+                TextEditor(editText)
+                    .padding()
+                    .frame(minHeight: 100, maxHeight: 200)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    .padding()
+                    .focused($isTextFieldFocused)
+                
+                Spacer()
+            }
+            .navigationTitle("Edit Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        onSave()
+                    }
+                    .bold()
+                    .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear {
+                // Auto-focus the text field
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isTextFieldFocused = true
+                }
+            }
+        }
     }
 }
 

@@ -73,6 +73,8 @@ export const handler = async (event) => {
             replyToMessageId: m.replyToMessageId || null,
             replyToContent: m.replyToContent || null,
             replyToSenderName: m.replyToSenderName || null,
+            isEdited: m.isEdited || false,
+            editedAt: m.editedAt || null,
           },
         })),
       }));
