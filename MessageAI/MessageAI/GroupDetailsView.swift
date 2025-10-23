@@ -23,8 +23,12 @@ struct GroupDetailsView: View {
     
     // Track online status for each member
     private var onlineMembers: Set<String> {
-        Set(conversation.participantIds.filter { 
-            webSocketService.userPresence[$0] ?? false 
+        Set(conversation.participantIds.filter { userId in
+            // Current user is always online if connected
+            if userId == authViewModel.currentUser?.id {
+                return webSocketService.connectionState == .connected
+            }
+            return webSocketService.userPresence[userId] ?? false
         })
     }
     

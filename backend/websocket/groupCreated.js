@@ -16,15 +16,21 @@ const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE || 'Conversations_Al
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
 
 export const handler = async (event) => {
-    console.log('WebSocket GroupCreated Event:', JSON.stringify(event, null, 2));
+    console.log('🎯🎯🎯 WebSocket GroupCreated Event RECEIVED 🎯🎯🎯');
+    console.log('Event:', JSON.stringify(event, null, 2));
     
     const connectionId = event.requestContext.connectionId;
     const domain = event.requestContext.domainName;
     const stage = event.requestContext.stage;
     
+    console.log(`📡 Connection ID: ${connectionId}`);
+    console.log(`📡 Domain: ${domain}`);
+    console.log(`📡 Stage: ${stage}`);
+    
     let groupData;
     try {
         groupData = JSON.parse(event.body);
+        console.log('📦 Parsed group data:', JSON.stringify(groupData, null, 2));
     } catch (error) {
         console.error('❌ Invalid JSON in message body');
         return {
@@ -42,6 +48,10 @@ export const handler = async (event) => {
         createdByName,
         timestamp
     } = groupData;
+    
+    console.log(`👥 Group Name: ${groupName}`);
+    console.log(`👥 Participants: ${participantIds?.length} - ${participantIds?.join(', ')}`);
+    console.log(`👥 Created By: ${createdByName} (${createdBy})`);
     
     // Validate required fields
     if (!conversationId || !participantIds || !Array.isArray(participantIds) || participantIds.length < 2) {

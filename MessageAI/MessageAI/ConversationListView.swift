@@ -121,7 +121,12 @@ struct ConversationListView: View {
                 handleIncomingMessage(payload)
             }
             .onChange(of: webSocketService.groupCreatedEvents.count) { oldValue, newValue in
-                guard newValue > oldValue, let groupData = webSocketService.groupCreatedEvents.last else { return }
+                print("📥 groupCreatedEvents count changed: \(oldValue) → \(newValue)")
+                guard newValue > oldValue, let groupData = webSocketService.groupCreatedEvents.last else {
+                    print("⚠️ No new group event to handle")
+                    return
+                }
+                print("📥 Processing group creation event...")
                 handleGroupCreated(groupData)
             }
             .onChange(of: webSocketService.groupUpdateEvents.count) { oldValue, newValue in

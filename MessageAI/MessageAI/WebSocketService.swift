@@ -266,7 +266,16 @@ class WebSocketService: ObservableObject {
         createdBy: String,
         createdByName: String
     ) {
-        guard connectionState == .connected else { return }
+        guard connectionState == .connected else {
+            print("❌ Cannot send groupCreated - not connected")
+            return
+        }
+        
+        print("📤 Sending groupCreated notification:")
+        print("   Group Name: \(groupName)")
+        print("   Participants: \(participantIds.count)")
+        print("   Participant IDs: \(participantIds)")
+        print("   Conversation ID: \(conversationId)")
         
         let payload: [String: Any] = [
             "action": "groupCreated",
@@ -280,6 +289,7 @@ class WebSocketService: ObservableObject {
         ]
         
         sendWebSocketPayload(payload)
+        print("✅ groupCreated notification sent")
     }
     
     /// Send group update notification
