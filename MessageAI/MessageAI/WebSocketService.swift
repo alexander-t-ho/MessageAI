@@ -80,6 +80,12 @@ class WebSocketService: ObservableObject {
     @Published var typingUsers: [String: String] = [:] // conversationId -> userName who is typing
     private var typingTimers: [String: Timer] = [:] // conversationId -> timer for clearing typing status
     
+    // Group chat events
+    @Published var groupCreatedEvents: [[String: Any]] = []
+    @Published var groupUpdateEvents: [[String: Any]] = []
+    @Published var groupMembersAddedEvents: [[String: Any]] = []
+    @Published var groupMemberLeftEvents: [[String: Any]] = []
+    
     // MARK: - Private Properties
     
     private var webSocketTask: URLSessionWebSocketTask?
@@ -556,6 +562,34 @@ class WebSocketService: ObservableObject {
                         }
                     }
                 }
+            }
+        } else if let type = json["type"] as? String, type == "groupCreated",
+                  let groupData = json["data"] as? [String: Any] {
+            // Handle group creation notification
+            Task { @MainActor in
+                print("👥 Group created notification received")
+                groupCreatedEvents.append(groupData)
+            }
+        } else if let type = json["type"] as? String, type == "groupUpdate",
+                  let updateData = json["data"] as? [String: Any] {
+            // Handle group update notification
+            Task { @MainActor in
+                print("👥 Group update notification received")
+                groupUpdateEvents.append(updateData)
+            }
+        } else if let type = json["type"] as? String, type == "groupMembersAdded",
+                  let memberData = json["data"] as? [String: Any] {
+            // Handle group members added notification
+            Task { @MainActor in
+                print("👥 Group members added notification received")
+                groupMembersAddedEvents.append(memberData)
+            }
+        } else if let type = json["type"] as? String, type == "groupMemberLeft",
+                  let memberData = json["data"] as? [String: Any] {
+            // Handle group member left notification
+            Task { @MainActor in
+                print("👥 Group member left notification received")
+                groupMemberLeftEvents.append(memberData)
             }
         } else {
                     print("⚠️ Unknown message format: \(json)")

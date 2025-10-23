@@ -120,6 +120,14 @@ struct ConversationListView: View {
                 guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
                 handleIncomingMessage(payload)
             }
+            .onChange(of: webSocketService.groupCreatedEvents.count) { oldValue, newValue in
+                guard newValue > oldValue, let groupData = webSocketService.groupCreatedEvents.last else { return }
+                handleGroupCreated(groupData)
+            }
+            .onChange(of: webSocketService.groupUpdateEvents.count) { oldValue, newValue in
+                guard newValue > oldValue, let updateData = webSocketService.groupUpdateEvents.last else { return }
+                handleGroupUpdate(updateData)
+            }
             .onChange(of: webSocketService.connectionState) { _, state in
                 if case .connected = state {
                     if syncService == nil {
@@ -206,6 +214,83 @@ extension ConversationListView {
                 lastMessageTime: timestamp
             )
             do { try databaseService.saveConversation(convo) } catch { print("❌ Error creating conversation: \(error)") }
+        }
+    }
+    
+    private func handleGroupCreated(_ groupData: [String: Any]) {
+        print("👥 Handling group created event")
+        
+        guard let conversationId = groupData["conversationId"] as? String,
+              let participantIds = groupData["participantIds"] as? [String],
+              let participantNames = groupData["participantNames"] as? [String],
+              let groupName = groupData["groupName"] as? String,
+              let createdBy = groupData["createdBy"] as? String,
+              let createdByName = groupData["createdByName"] as? String,
+              let createdAtString = groupData["createdAt"] as? String,
+              let groupAdmins = groupData["groupAdmins"] as? [String] else {
+            print("❌ Invalid group creation data")
+            return
+        }
+        
+        let createdAt = ISO8601DateFormatter().date(from: createdAtString) ?? Date()
+        
+        // Check if conversation already exists
+        if conversations.contains(where: { $0.id == conversationId }) {
+            print("⚠️ Group conversation already exists locally")
+            return
+        }
+        
+        // Create new group conversation
+        let conversation = ConversationData(
+            id: conversationId,
+            participantIds: participantIds,
+            participantNames: participantNames,
+            isGroupChat: true,
+            groupName: groupName,
+            lastMessage: nil,
+            lastMessageTime: createdAt,
+            unreadCount: 0,
+            createdBy: createdBy,
+            createdByName: createdByName,
+            createdAt: createdAt,
+            groupAdmins: groupAdmins
+        )
+        
+        do {
+            try databaseService.saveConversation(conversation)
+            print("✅ Group conversation created locally: \(groupName)")
+        } catch {
+            print("❌ Error creating group conversation: \(error)")
+        }
+    }
+    
+    private func handleGroupUpdate(_ updateData: [String: Any]) {
+        print("👥 Handling group update event")
+        
+        guard let conversationId = updateData["conversationId"] as? String,
+              let groupName = updateData["groupName"] as? String,
+              let updatedBy = updateData["updatedBy"] as? String,
+              let timestampString = updateData["timestamp"] as? String else {
+            print("❌ Invalid group update data")
+            return
+        }
+        
+        let timestamp = ISO8601DateFormatter().date(from: timestampString) ?? Date()
+        
+        // Find and update existing conversation
+        if let existing = conversations.first(where: { $0.id == conversationId }) {
+            existing.groupName = groupName
+            existing.lastUpdatedBy = updatedBy
+            existing.lastUpdatedAt = timestamp
+            
+            do {
+                try modelContext.save()
+                print("✅ Group name updated locally: \(groupName)")
+            } catch {
+                print("❌ Error updating group: \(error)")
+            }
+        } else {
+            print("⚠️ Group conversation not found for update")
         }
     }
 }
