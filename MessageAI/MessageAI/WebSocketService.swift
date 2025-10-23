@@ -426,14 +426,14 @@ class WebSocketService: ObservableObject {
                     print("⌨️ \(senderName) is typing in conversation \(conversationId)")
                     print("⌨️ Current typing users: \(typingUsers)")
                 } else {
-                    // Keep indicator visible for 5 more seconds after user stops typing to reduce jitter
-                    print("⌨️ \(senderName) stopped typing, keeping indicator for 5 seconds")
+                    // Keep indicator visible for 1.5 seconds after user stops typing
+                    print("⌨️ \(senderName) stopped typing, keeping indicator for 1.5 seconds")
                     
                     // Cancel any existing timer
                     typingTimers[conversationId]?.invalidate()
                     
-                    // Start new timer to clear after 5 seconds
-                    typingTimers[conversationId] = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                    // Start new timer to clear after 1.5 seconds
+                    typingTimers[conversationId] = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
                         Task { @MainActor [weak self] in
                             self?.typingUsers.removeValue(forKey: conversationId)
                             self?.typingTimers[conversationId] = nil

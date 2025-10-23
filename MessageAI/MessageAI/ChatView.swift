@@ -974,12 +974,30 @@ struct MessageBubble: View {
     }
 
     var body: some View {
-        HStack {
-            if isFromCurrentUser {
-                Spacer(minLength: 60)
+        // For deleted messages, don't apply sender/receiver alignment
+        if message.isDeleted {
+            HStack {
+                Spacer()
+                Text("This message was deleted")
+                    .font(.system(size: 12))
+                    .italic()
+                    .foregroundColor(.gray)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray5))
+                    .cornerRadius(14)
+                    .scaleEffect(0.7) // 70% size
+                    .opacity(0.5) // 50% opacity
+                Spacer()
             }
-            
-            ZStack(alignment: .leading) {
+            .padding(.vertical, 2)
+        } else {
+            HStack {
+                if isFromCurrentUser {
+                    Spacer(minLength: 60)
+                }
+                
+                ZStack(alignment: .leading) {
                 // Reply icon background (shows when swiping right)
                 if swipeOffset > 10 {
                     HStack {
@@ -995,24 +1013,7 @@ struct MessageBubble: View {
                     .cornerRadius(20)
                 }
                 
-            VStack(alignment: .center, spacing: 4) {
-                // Show deleted message differently - centered for both users
-                if message.isDeleted {
-                    HStack {
-                        Spacer()
-                        Text("This message was deleted")
-                            .font(.system(size: 14))
-                            .italic()
-                            .foregroundColor(.gray)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(18)
-                            .opacity(0.5) // 50% opacity for the entire deleted message
-                        Spacer()
-                    }
-                } else {
-                    VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
                     // Reply context (if this message is a reply)
                     if let replyToContent = message.replyToContent,
                        let replyToSenderName = message.replyToSenderName,
@@ -1093,9 +1094,8 @@ struct MessageBubble: View {
                     .foregroundColor(.gray)
                     .padding(.top, 2)
                 }
-                    } // End of VStack for non-deleted message content
-                } // End of else (non-deleted message)
-            }
+            } // End of VStack
+            } // End of ZStack
             .offset(x: swipeOffset)
             // force view refresh when status updates tick changes so latest read attaches correctly
             .id(refreshKey)
@@ -1174,7 +1174,8 @@ struct MessageBubble: View {
             if !isFromCurrentUser {
                 Spacer(minLength: 60)
             }
-        }
+        } // End of HStack
+        } // End of else (non-deleted messages)
     }
     
     private var isFromCurrentUser: Bool {
