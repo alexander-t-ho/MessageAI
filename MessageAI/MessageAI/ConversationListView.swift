@@ -109,7 +109,7 @@ struct ConversationListView: View {
                 }
             }
             .sheet(isPresented: $showNewChat) {
-                NewConversationView(showingNewGroup: $showingNewGroup)
+                NewConversationView(showingNewGroup: $showingNewGroup, selectedConversation: $selectedConversation)
             }
             .sheet(isPresented: $showingNewGroup) {
                 NewGroupChatView()
@@ -164,9 +164,6 @@ struct ConversationListView: View {
         // For each group, check if there are any direct message conversations
         // with messages that belong to the group
         for groupConvo in groupConvos {
-            let groupMessages = (try? modelContext.fetch(FetchDescriptor<MessageData>())) ?? []
-            let messagesForGroup = groupMessages.filter { $0.conversationId == groupConvo.id }
-            
             // Find any non-group conversations that might have the same participants
             let duplicates = conversations.filter { convo in
                 !convo.isGroupChat &&
@@ -531,6 +528,7 @@ struct NewConversationView: View {
     @EnvironmentObject var webSocketService: WebSocketService
     
     @Binding var showingNewGroup: Bool
+    @Binding var selectedConversation: ConversationData?
     
     @State private var searchQuery = ""
     @State private var searchResults: [UserSearchResult] = []
