@@ -1,15 +1,18 @@
 /**
- * WebSocket Presence Update Handler (AWS SDK v2)
+ * WebSocket Presence Update Handler
  * Fan-out { userId, isOnline } to all connections in Connections_AlexHo.
- * Uses built-in aws-sdk v2 in Lambda runtime to avoid bundling deps.
  */
 
-const AWS = require('aws-sdk');
-const ddb = new AWS.DynamoDB.DocumentClient({ region: process.env.AWS_REGION || 'us-east-1' });
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+
+const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
+const docClient = DynamoDBDocumentClient.from(client);
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   console.log('Presence Update Event:', JSON.stringify(event, null, 2));
   const domain = event.requestContext.domainName;
   const stage = event.requestContext.stage;
@@ -25,16 +28,38 @@ exports.handler = async (event) => {
   }
 
   try {
-    const all = await ddb.scan({ TableName: CONNECTIONS_TABLE }).promise();
-    const api = new AWS.ApiGatewayManagementApi({ endpoint: `https://${domain}/${stage}` });
-    const data = JSON.stringify({ type: 'presence', data: { userId, isOnline } });
+    // Get all connections
+    const all = await docClient.send(new ScanCommand({ TableName: CONNECTIONS_TABLE }));
+    
+    // Create API Gateway Management client
+    const api = new ApiGatewayManagementApiClient({ 
+      region: process.env.AWS_REGION || 'us-east-1',
+      endpoint: `https://${domain}/${stage}` 
+    });
+    
+    // Prepare presence data
+    const presenceData = JSON.stringify({ 
+      type: 'presence', 
+      data: { userId, isOnline } 
+    });
+    
+    // Send to all connections
     const sends = (all.Items || []).map(async (c) => {
       try {
-        await api.postToConnection({ ConnectionId: c.connectionId, Data: data }).promise();
+        await api.send(new PostToConnectionCommand({ 
+          ConnectionId: c.connectionId, 
+          Data: Buffer.from(presenceData) 
+        }));
+        console.log(`✅ Sent presence to connection ${c.connectionId}`);
       } catch (e) {
-        console.error('Presence send error:', e && e.message ? e.message : e);
+        if (e.statusCode === 410) {
+          console.log(`Stale connection ${c.connectionId}, skipping`);
+        } else {
+          console.error('Presence send error:', e);
+        }
       }
     });
+    
     await Promise.all(sends);
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (e) {

@@ -76,7 +76,7 @@ struct ConversationListView: View {
                         Image(systemName: simulateOffline ? "icloud.slash" : "icloud")
                     }
                     .labelsHidden()
-                    .onChange(of: simulateOffline) { newVal in
+                    .onChange(of: simulateOffline) { _, newVal in
                         print("🛜 Simulate Offline toggled -> \(newVal ? "ON" : "OFF")")
                         webSocketService.simulateOffline = newVal
                         if newVal {
@@ -181,6 +181,8 @@ extension ConversationListView {
 struct ConversationRow: View {
     let conversation: ConversationData
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var webSocketService: WebSocketService
     @Query private var allDrafts: [DraftData]
     
     // Get draft for this conversation
@@ -192,18 +194,49 @@ struct ConversationRow: View {
         DatabaseService(modelContext: modelContext)
     }
     
+    // Get recipient ID (other participant in conversation)
+    private var recipientId: String? {
+        conversation.participantIds.first { $0 != authViewModel.currentUser?.id }
+    }
+    
+    // Check if recipient is online
+    private var isOnline: Bool {
+        if let id = recipientId {
+            let online = webSocketService.userPresence[id] ?? false
+            if online {
+                print("🟢 User \(displayName) is online (id: \(id))")
+            }
+            return online
+        }
+        return false
+    }
+    
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar
-            Circle()
-                .fill(avatarColor)
-                .frame(width: 56, height: 56)
-                .overlay(
-                    Text(displayName.prefix(1).uppercased())
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                )
+            // Avatar with online indicator
+            ZStack(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(avatarColor)
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Text(displayName.prefix(1).uppercased())
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    )
+                
+                // Online indicator
+                if isOnline {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 14, height: 14)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(.systemBackground), lineWidth: 2)
+                        )
+                        .offset(x: 2, y: 2)
+                }
+            }
             
             // Content
             VStack(alignment: .leading, spacing: 4) {

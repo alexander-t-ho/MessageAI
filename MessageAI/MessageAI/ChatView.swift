@@ -29,6 +29,8 @@ struct ChatView: View {
     @State private var refreshTick: Int = 0 // forces UI refresh on status updates
     @State private var userHasManuallyScrolledUp: Bool = false // disables auto-scroll until back at bottom
     @State private var scrollToBottomTick: Int = 0 // trigger to request bottom scroll inside ScrollViewReader
+    @State private var typingTimer: Timer? = nil // Timer for typing indicator timeout
+    @State private var lastTypingTime: Date = Date() // Track last typing activity
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -143,6 +145,7 @@ struct ChatView: View {
                 }
                 .onAppear {
                     print("👁️ ChatView appeared - loading messages")
+                    print("📍 Conversation ID: \(conversation.id)")
                     // Initialize visible messages from query
                     visibleMessages = queriedMessages
                     print("📊 Loaded \(visibleMessages.count) messages")
@@ -186,16 +189,39 @@ struct ChatView: View {
                 )
             }
             
+            // Typing indicator - shows above input bar
+            if let typingUser = webSocketService.typingUsers[conversation.id] {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                    Text("\(typingUser) is typing...")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .italic()
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                .background(Color(.systemGray6))
+                .onAppear {
+                    print("🎯 Typing indicator visible for: \(typingUser)")
+                }
+            }
+            
             // Input bar
             HStack(spacing: 12) {
                 TextField("Message", text: $messageText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...6)
                     .focused($isInputFocused)
-                    .onChange(of: messageText) { _, newValue in
+                    .onChange(of: messageText) { oldValue, newValue in
                         // Avoid recreating a draft immediately after send
                         guard !suppressDraftSaves else { return }
                         saveDraft(newValue)
+                        
+                        // Send typing indicator
+                        handleTypingIndicator(oldValue: oldValue, newValue: newValue)
                     }
                 
                 // Offline/Queue badge (based on WS connection)
@@ -235,6 +261,10 @@ struct ChatView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
             .background(Color(.systemBackground))
+        }
+        .onDisappear {
+            // Clean up typing indicator when leaving chat
+            sendTypingIndicator(isTyping: false)
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -371,6 +401,9 @@ struct ChatView: View {
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        
+        // Stop typing indicator
+        sendTypingIndicator(isTyping: false)
         
         isLoading = true
         // Prevent TextField change observers from saving a new draft during send
@@ -730,6 +763,61 @@ struct ChatView: View {
         )
     }
     
+    // Handle typing indicator
+    private func handleTypingIndicator(oldValue: String, newValue: String) {
+        let trimmedOld = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // If user just started typing (went from empty to non-empty)
+        if trimmedOld.isEmpty && !trimmedNew.isEmpty {
+            sendTypingIndicator(isTyping: true)
+        }
+        // If user is still typing
+        else if !trimmedNew.isEmpty {
+            // Update last typing time
+            lastTypingTime = Date()
+            
+            // Cancel existing timer
+            typingTimer?.invalidate()
+            
+            // If we haven't sent a typing indicator recently, send one
+            if Date().timeIntervalSince(lastTypingTime) > 2 {
+                sendTypingIndicator(isTyping: true)
+            }
+            
+            // Set timer to stop typing after 3 seconds of inactivity
+            typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                Task { @MainActor in
+                    sendTypingIndicator(isTyping: false)
+                }
+            }
+        }
+        // If user cleared the text
+        else if !trimmedOld.isEmpty && trimmedNew.isEmpty {
+            typingTimer?.invalidate()
+            sendTypingIndicator(isTyping: false)
+        }
+    }
+    
+    // Send typing indicator via WebSocket
+    private func sendTypingIndicator(isTyping: Bool) {
+        print("📤 Sending typing: \(isTyping ? "START" : "STOP") for conversation \(conversation.id)")
+        print("   From: \(currentUserId) to: \(recipientId)")
+        
+        webSocketService.sendTyping(
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            senderName: currentUserName,
+            recipientId: recipientId,
+            isTyping: isTyping
+        )
+        
+        if !isTyping {
+            typingTimer?.invalidate()
+            typingTimer = nil
+        }
+    }
+    
     private func forwardToConversation(_ message: MessageData, to targetConversation: ConversationData) {
         // Create a new message in the target conversation
         let forwardedMessage = MessageData(
@@ -916,9 +1004,8 @@ struct MessageBubble: View {
                 DragGesture()
                     .onChanged { value in
                         let translation = value.translation.width
-                        // thresholds: light reveal vs reply
+                        // threshold for light reveal
                         let revealThreshold: CGFloat = 10
-                        let replyThreshold: CGFloat = 30
                         // Swipe RIGHT interactions only
                         if translation > 0 {
                             swipeOffset = min(translation, 60)

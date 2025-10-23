@@ -77,12 +77,14 @@ class WebSocketService: ObservableObject {
     @Published var userPresence: [String: Bool] = [:] // userId -> online
     @Published var simulateOffline: Bool = false // if true, never connect/send
     @Published var catchUpCounter: Int = 0 // increments when catch-up completes
+    @Published var typingUsers: [String: String] = [:] // conversationId -> userName who is typing
     
     // MARK: - Private Properties
     
     private var webSocketTask: URLSessionWebSocketTask?
     private var userId: String?
     private var reconnectTimer: Timer?
+    private var heartbeatTimer: Timer?
     private var shouldReconnect = true
     private let maxReconnectAttempts = 5
     private var reconnectAttempt = 0
@@ -128,7 +130,13 @@ class WebSocketService: ObservableObject {
     /// Disconnect from WebSocket
     func disconnect() {
         print("🔌 Disconnecting from WebSocket...")
-        // Presence broadcast disabled to avoid server errors
+        
+        // Send offline presence before disconnecting
+        sendPresence(isOnline: false)
+        
+        // Stop heartbeat
+        stopHeartbeat()
+        
         shouldReconnect = false
         reconnectTimer?.invalidate()
         reconnectTimer = nil
@@ -269,8 +277,16 @@ class WebSocketService: ObservableObject {
         reconnectAttempt = 0
         
         print("✅ Connected to WebSocket")
-        // Presence broadcast disabled to avoid server errors
-
+        
+        // Start heartbeat timer (every 30 seconds)
+        startHeartbeat()
+        
+        // Send online presence after a small delay to ensure connection is fully established
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            sendPresence(isOnline: true)
+        }
+        
         // Announce a lightweight ping so backend can record/refresh latest connection
         let pingPayload: [String: Any] = [
             "action": "ping",
@@ -377,13 +393,33 @@ class WebSocketService: ObservableObject {
                 } else if let type = json["type"] as? String, type == "catchUpComplete" {
                     // Signal catch-up completion
                     catchUpCounter += 1
-                } else if let type = json["type"] as? String, type == "presence",
-                          let presence = json["data"] as? [String: Any],
-                          let userId = presence["userId"] as? String,
-                          let isOnline = presence["isOnline"] as? Bool {
-                    userPresence[userId] = isOnline
-                    
+        } else if let type = json["type"] as? String, type == "presence",
+                  let presence = json["data"] as? [String: Any],
+                  let userId = presence["userId"] as? String,
+                  let isOnline = presence["isOnline"] as? Bool {
+            Task { @MainActor in
+                userPresence[userId] = isOnline
+                print("👥 Presence update: \(userId) is \(isOnline ? "online" : "offline")")
+                print("👥 Current online users: \(userPresence.filter { $0.value }.map { $0.key })")
+            }
+        } else if let type = json["type"] as? String, type == "typing",
+                  let typingData = json["data"] as? [String: Any],
+                  let conversationId = typingData["conversationId"] as? String,
+                  let senderName = typingData["senderName"] as? String,
+                  let isTyping = typingData["isTyping"] as? Bool {
+            // Handle typing indicator
+            Task { @MainActor in
+                if isTyping {
+                    typingUsers[conversationId] = senderName
+                    print("⌨️ \(senderName) is typing in conversation \(conversationId)")
+                    print("⌨️ Current typing users: \(typingUsers)")
                 } else {
+                    typingUsers.removeValue(forKey: conversationId)
+                    print("⌨️ \(senderName) stopped typing")
+                    print("⌨️ Current typing users: \(typingUsers)")
+                }
+            }
+        } else {
                     print("⚠️ Unknown message format: \(json)")
                 }
             }
@@ -414,10 +450,91 @@ class WebSocketService: ObservableObject {
         }
     }
 
+    // Send typing indicator
+    func sendTyping(conversationId: String, senderId: String, senderName: String, recipientId: String, isTyping: Bool) {
+        guard connectionState == .connected else { return }
+        
+        let payload: [String: Any] = [
+            "action": "typing",
+            "conversationId": conversationId,
+            "senderId": senderId,
+            "senderName": senderName,
+            "recipientId": recipientId,
+            "isTyping": isTyping
+        ]
+        
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error { 
+                    print("❌ Typing send error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
     // Presence broadcast
     func sendPresence(isOnline: Bool) {
-        // Temporarily disabled to stabilize connection
-        return
+        // Re-enable presence with proper error handling
+        guard connectionState == .connected else { return }
+        guard let uid = userId else { return }
+        
+        let payload: [String: Any] = [
+            "action": "presenceUpdate",
+            "userId": uid,
+            "isOnline": isOnline
+        ]
+        
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            print("📡 Sending presence update: isOnline=\(isOnline)")
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error { 
+                    print("❌ Presence send error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    // Start heartbeat timer
+    private func startHeartbeat() {
+        stopHeartbeat() // Clear any existing timer
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.sendHeartbeat()
+            }
+        }
+        print("💓 Heartbeat started (every 30 seconds)")
+    }
+    
+    // Stop heartbeat timer
+    private func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+        print("💓 Heartbeat stopped")
+    }
+    
+    // Send heartbeat
+    private func sendHeartbeat() {
+        guard connectionState == .connected else { return }
+        guard let uid = userId else { return }
+        
+        let payload: [String: Any] = [
+            "action": "ping",
+            "userId": uid,
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error {
+                    print("❌ Heartbeat error: \(error.localizedDescription)")
+                } else {
+                    print("💓 Heartbeat sent")
+                }
+            }
+        }
     }
     
     /// Handle disconnection and attempt reconnect
@@ -425,6 +542,12 @@ class WebSocketService: ObservableObject {
         print("🔌 WebSocket disconnected")
         connectionState = .error(error)
         webSocketTask = nil
+        
+        // Stop heartbeat on disconnect
+        stopHeartbeat()
+        
+        // Send offline presence
+        sendPresence(isOnline: false)
         
         // Attempt reconnection if enabled
         if !simulateOffline && shouldReconnect && reconnectAttempt < maxReconnectAttempts {
@@ -449,6 +572,7 @@ class WebSocketService: ObservableObject {
     deinit {
         shouldReconnect = false
         reconnectTimer?.invalidate()
+        heartbeatTimer?.invalidate()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         print("🔌 WebSocketService deinitialized")
     }
