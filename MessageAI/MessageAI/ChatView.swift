@@ -998,22 +998,22 @@ struct MessageBubble: View {
                 }
                 
                 ZStack(alignment: .leading) {
-                // Reply icon background (shows when swiping right)
-                if swipeOffset > 10 {
-                    HStack {
-                        Image(systemName: "arrowshape.turn.up.left.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding(.leading, 20)
-                            .opacity(Double(min(swipeOffset / 60.0, 1.0)))
-                        Spacer()
+                    // Reply icon background (shows when swiping right)
+                    if swipeOffset > 10 {
+                        HStack {
+                            Image(systemName: "arrowshape.turn.up.left.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(.leading, 20)
+                                .opacity(Double(min(swipeOffset / 60.0, 1.0)))
+                            Spacer()
+                        }
+                        .frame(height: 50)
+                        .background(Color.blue)
+                        .cornerRadius(20)
                     }
-                    .frame(height: 50)
-                    .background(Color.blue)
-                    .cornerRadius(20)
-                }
-                
-            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
+                    
+                    VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
                     // Reply context (if this message is a reply)
                     if let replyToContent = message.replyToContent,
                        let replyToSenderName = message.replyToSenderName,
@@ -1094,24 +1094,23 @@ struct MessageBubble: View {
                     .foregroundColor(.gray)
                     .padding(.top, 2)
                 }
-            } // End of VStack
-            } // End of ZStack
-            .offset(x: swipeOffset)
-            // force view refresh when status updates tick changes so latest read attaches correctly
-            .id(refreshKey)
-            .onChange(of: message.status) { oldValue, newValue in
+                    } // End of VStack
+                } // End of ZStack
+                .offset(x: swipeOffset)
+                // force view refresh when status updates tick changes so latest read attaches correctly
+                .id(refreshKey)
+                .onChange(of: message.status) { oldValue, newValue in
                 // Reset hide flag when status changes
-                if oldValue != newValue {
-                    hideDeliveredStatus = false
-                    lastStatus = newValue
+                    if oldValue != newValue {
+                        hideDeliveredStatus = false
+                        lastStatus = newValue
+                    }
                 }
-            }
-            .onAppear {
-                lastStatus = message.status
-            }
-            } // Close ZStack
-            .gesture(
-                DragGesture()
+                .onAppear {
+                    lastStatus = message.status
+                }
+                .gesture(
+                    DragGesture()
                     .onChanged { value in
                         let translation = value.translation.width
                         // threshold for light reveal
@@ -1146,30 +1145,30 @@ struct MessageBubble: View {
                             swipeOffset = 0
                         }
                     }
-            )
-            .animation(.easeInOut(duration: 0.2), value: swipeOffset)
-            .contextMenu {
-                Button(action: onEmphasize) {
-                    Label(
-                        message.isEmphasized ? "Remove Emphasis" : "Emphasize",
-                        systemImage: message.isEmphasized ? "heart.slash.fill" : "heart.fill"
-                    )
+                )
+                .animation(.easeInOut(duration: 0.2), value: swipeOffset)
+                .contextMenu {
+                    Button(action: onEmphasize) {
+                        Label(
+                            message.isEmphasized ? "Remove Emphasis" : "Emphasize",
+                            systemImage: message.isEmphasized ? "heart.slash.fill" : "heart.fill"
+                        )
+                    }
+                    
+                    Button(action: onForward) {
+                        Label("Forward", systemImage: "arrowshape.turn.up.right.fill")
+                    }
+                    
+                    Button(action: onReply) {
+                        Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                    }
+                    
+                    Divider()
+                    
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
-                
-                Button(action: onForward) {
-                    Label("Forward", systemImage: "arrowshape.turn.up.right.fill")
-                }
-                
-                Button(action: onReply) {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
-                }
-                
-                Divider()
-                
-                Button(role: .destructive, action: onDelete) {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
             
             if !isFromCurrentUser {
                 Spacer(minLength: 60)
