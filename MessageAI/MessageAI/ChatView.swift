@@ -24,9 +24,7 @@ struct ChatView: View {
     @State private var replyingToMessage: MessageData? // Message being replied to
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
-    @State private var showEditSheet = false
     @State private var messageToEdit: MessageData?
-    @State private var editText = ""
     @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
     @State private var isAtBottom: Bool = false // true when user is viewing the latest message
@@ -270,6 +268,39 @@ struct ChatView: View {
                 )
             }
             
+            // Edit banner (shown when editing a message)
+            if let editMessage = messageToEdit {
+                HStack(spacing: 8) {
+                    Image(systemName: "pencil.circle.fill")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 16))
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Editing Message")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.blue)
+                        Text(editMessage.content)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                            .lineLimit(1)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        messageToEdit = nil
+                        messageText = ""
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 20))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+            }
             
             // Input bar
             HStack(spacing: 12) {
@@ -308,12 +339,18 @@ struct ChatView: View {
                     .accessibilityLabel("Queued messages: \(queuedCount). \(isOnlineEffective ? "Online" : "Offline")")
                 }
                 
-                Button(action: sendMessage) {
+                Button(action: {
+                    if messageToEdit != nil {
+                        saveEdit()
+                    } else {
+                        sendMessage()
+                    }
+                }) {
                     if isLoading {
                         ProgressView()
                             .frame(width: 32, height: 32)
                     } else {
-                        Image(systemName: "arrow.up.circle.fill")
+                        Image(systemName: messageToEdit != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
                             .font(.system(size: 32))
                             .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
                     }
@@ -390,17 +427,6 @@ struct ChatView: View {
                     .environmentObject(authViewModel)
                     .environmentObject(webSocketService)
             }
-        }
-        .sheet(isPresented: $showEditSheet) {
-            EditMessageView(
-                editText: $editText,
-                onSave: saveEdit,
-                onCancel: {
-                    showEditSheet = false
-                    messageToEdit = nil
-                    editText = ""
-                }
-            )
         }
         .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
             // New message received via WebSocket
@@ -616,7 +642,7 @@ struct ChatView: View {
                     senderId: currentUserId,
                     senderName: currentUserName,
                     recipientId: recipientId,
-                    recipientIds: conversation.isGroupChat ? conversation.participantIds : nil,
+                    recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
                     isGroupChat: conversation.isGroupChat,
                     content: text,
                     timestamp: Date(),
@@ -746,25 +772,27 @@ struct ChatView: View {
             return
         }
         
-        // Set up editing state
+        // Set up editing state - populate message bar
         messageToEdit = message
-        editText = message.content
-        showEditSheet = true
+        messageText = message.content
+        isInputFocused = true
     }
     
     private func saveEdit() {
         guard let message = messageToEdit else { return }
-        guard !editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            // Don't allow empty edits
-            showEditSheet = false
+        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !trimmedText.isEmpty else {
+            // Don't allow empty edits - cancel edit mode
+            messageToEdit = nil
+            messageText = ""
             return
         }
         
-        let trimmedText = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
         // Don't save if content hasn't changed
         guard trimmedText != message.content else {
-            showEditSheet = false
+            messageToEdit = nil
+            messageText = ""
             return
         }
         
@@ -802,9 +830,9 @@ struct ChatView: View {
                 isGroupChat: conversation.isGroupChat
             )
             
-            showEditSheet = false
+            // Clear edit state
             messageToEdit = nil
-            editText = ""
+            messageText = ""
         } catch {
             print("   ❌ Error editing message: \(error)")
         }
@@ -1756,54 +1784,6 @@ struct ForwardMessageView: View {
         let name = displayName(for: conversation)
         let index = abs(name.hashValue % colors.count)
         return colors[index]
-    }
-}
-
-// MARK: - Edit Message View
-
-struct EditMessageView: View {
-    @Binding var editText: String
-    let onSave: () -> Void
-    let onCancel: () -> Void
-    @FocusState private var isTextFieldFocused: Bool
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Edit area
-                TextEditor(text: $editText)
-                    .padding()
-                    .frame(minHeight: 100, maxHeight: 200)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    .padding()
-                    .focused($isTextFieldFocused)
-                
-                Spacer()
-            }
-            .navigationTitle("Edit Message")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        onCancel()
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        onSave()
-                    }
-                    .bold()
-                    .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .onAppear {
-                // Auto-focus the text field
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    isTextFieldFocused = true
-                }
-            }
-        }
     }
 }
 
