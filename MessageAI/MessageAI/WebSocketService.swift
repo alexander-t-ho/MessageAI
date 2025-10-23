@@ -268,14 +268,17 @@ class WebSocketService: ObservableObject {
     ) {
         guard connectionState == .connected else {
             print("❌ Cannot send groupCreated - not connected")
+            print("   Connection state: \(connectionState)")
             return
         }
         
-        print("📤 Sending groupCreated notification:")
+        print("📤 SENDING GROUP CREATED NOTIFICATION:")
         print("   Group Name: \(groupName)")
         print("   Participants: \(participantIds.count)")
         print("   Participant IDs: \(participantIds)")
+        print("   Participant Names: \(participantNames)")
         print("   Conversation ID: \(conversationId)")
+        print("   Created By: \(createdByName) (\(createdBy))")
         
         let payload: [String: Any] = [
             "action": "groupCreated",
@@ -290,8 +293,9 @@ class WebSocketService: ObservableObject {
             "timestamp": ISO8601DateFormatter().string(from: Date())
         ]
         
+        print("📤 Payload: \(payload)")
         sendWebSocketPayload(payload)
-        print("✅ groupCreated notification sent")
+        print("✅ groupCreated notification sent via WebSocket")
     }
     
     /// Send group update notification
@@ -586,14 +590,18 @@ class WebSocketService: ObservableObject {
                     }
                 }
             }
-        } else if let type = json["type"] as? String, type == "groupCreated",
-                  let groupData = json["data"] as? [String: Any] {
-            // Handle group creation notification
-            Task { @MainActor in
-                print("👥 Group created notification received")
-                groupCreatedEvents.append(groupData)
-            }
-        } else if let type = json["type"] as? String, type == "groupUpdate",
+            } else if let type = json["type"] as? String, type == "groupCreated",
+                      let groupData = json["data"] as? [String: Any] {
+                // Handle group creation notification
+                Task { @MainActor in
+                    print("👥👥👥 GROUP CREATED NOTIFICATION RECEIVED 👥👥👥")
+                    print("   Group Name: \(groupData["groupName"] ?? "unknown")")
+                    print("   Conversation ID: \(groupData["conversationId"] ?? "unknown")")
+                    print("   Participants: \(groupData["participantIds"] ?? [])")
+                    groupCreatedEvents.append(groupData)
+                    print("✅ Added to groupCreatedEvents (count: \(groupCreatedEvents.count))")
+                }
+            } else if let type = json["type"] as? String, type == "groupUpdate",
                   let updateData = json["data"] as? [String: Any] {
             // Handle group update notification
             Task { @MainActor in

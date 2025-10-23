@@ -17,62 +17,55 @@ const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
 
 export const handler = async (event) => {
     console.log('🎯🎯🎯 WebSocket GroupCreated Event RECEIVED 🎯🎯🎯');
-    console.log('Event:', JSON.stringify(event, null, 2));
-    
-    const connectionId = event.requestContext.connectionId;
-    const domain = event.requestContext.domainName;
-    const stage = event.requestContext.stage;
-    
-    console.log(`📡 Connection ID: ${connectionId}`);
-    console.log(`📡 Domain: ${domain}`);
-    console.log(`📡 Stage: ${stage}`);
-    
-    let groupData;
-    try {
-        groupData = JSON.parse(event.body);
-        console.log('📦 Parsed group data:', JSON.stringify(groupData, null, 2));
-    } catch (error) {
-        console.error('❌ Invalid JSON in message body');
-        return {
-            statusCode: 400,
-            body: JSON.stringify({ error: 'Invalid message format' })
-        };
-    }
-    
-    const {
-        conversationId,
-        groupName,
-        participantIds,
-        participantNames,
-        createdBy,
-        createdByName,
-        timestamp,
-        groupAdmins,
-        createdAt
-    } = groupData;
-    
-    console.log(`👥 Group Name: ${groupName}`);
-    console.log(`👥 Participants: ${participantIds?.length} - ${participantIds?.join(', ')}`);
-    console.log(`👥 Created By: ${createdByName} (${createdBy})`);
-    
-    // Validate required fields
-    if (!conversationId || !participantIds || !Array.isArray(participantIds) || participantIds.length < 2) {
-        console.error('❌ Missing or invalid required fields');
-        console.error(`   conversationId: ${conversationId}`);
-        console.error(`   participantIds: ${JSON.stringify(participantIds)}`);
-        console.error(`   participantIds.length: ${participantIds?.length}`);
-        console.error(`   groupName: ${groupName}`);
-        console.error(`   createdBy: ${createdBy}`);
-        return {
-            statusCode: 400,
-            body: JSON.stringify({ error: 'Missing or invalid required fields' })
-        };
-    }
-    
-    console.log('✅ Validation passed, processing group creation...');
     
     try {
-        // 1. Save group conversation to DynamoDB
+        // Parse request
+        const connectionId = event.requestContext.connectionId;
+        const domain = event.requestContext.domainName;
+        const stage = event.requestContext.stage;
+        
+        console.log(`📡 Connection: ${connectionId}, Domain: ${domain}/${stage}`);
+        
+        // Parse body
+        let groupData;
+        try {
+            groupData = JSON.parse(event.body);
+            console.log('📦 Group data received');
+        } catch (error) {
+            console.error('❌ Invalid JSON in body:', event.body);
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Invalid message format' })
+            };
+        }
+        
+        const {
+            conversationId,
+            groupName,
+            participantIds,
+            participantNames,
+            createdBy,
+            createdByName,
+            timestamp,
+            groupAdmins,
+            createdAt
+        } = groupData;
+        
+        console.log(`👥 Creating group: ${groupName}`);
+        console.log(`👥 Participants: ${participantIds?.length} users`);
+        console.log(`👥 IDs: ${participantIds?.join(', ')}`);
+        
+        // Validate
+        if (!conversationId || !participantIds || !Array.isArray(participantIds) || participantIds.length < 2) {
+            console.error('❌ Invalid group data');
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Invalid group data' })
+            };
+        }
+        
+        // 1. Save to DynamoDB
+        console.log('💾 Saving group to DynamoDB...');
         await docClient.send(new PutCommand({
             TableName: CONVERSATIONS_TABLE,
             Item: {
@@ -85,13 +78,12 @@ export const handler = async (event) => {
                 createdByName: createdByName,
                 createdAt: createdAt || timestamp || new Date().toISOString(),
                 groupAdmins: groupAdmins || [createdBy],
-                lastUpdatedAt: timestamp || new Date().toISOString()
+                lastUpdatedAt: new Date().toISOString()
             }
         }));
+        console.log(`✅ Group saved: ${conversationId}`);
         
-        console.log(`✅ Group conversation saved to DynamoDB: ${conversationId}`);
-        
-        // 2. Notify all participants about the new group
+        // 2. Broadcast to all participants
         const apiGateway = new ApiGatewayManagementApiClient({
             region: process.env.AWS_REGION || 'us-east-1',
             endpoint: `https://${domain}/${stage}`
@@ -112,12 +104,14 @@ export const handler = async (event) => {
             }
         };
         
-        // Send to ALL participants to ensure everyone gets the group
-        // Including the creator to handle multi-device scenarios
-        console.log(`📨 Broadcasting to ALL ${participantIds.length} participants`);
+        console.log(`📨 Broadcasting to ${participantIds.length} participants...`);
+        let successCount = 0;
+        let failCount = 0;
         
+        // Send to ALL participants (including creator for multi-device support)
         for (const participantId of participantIds) {
             try {
+                // Get all connections for this user
                 const connections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,
                     IndexName: 'userId-index',
@@ -128,47 +122,58 @@ export const handler = async (event) => {
                 }));
                 
                 if (connections.Items && connections.Items.length > 0) {
+                    console.log(`📱 User ${participantId} has ${connections.Items.length} connection(s)`);
+                    
                     for (const connection of connections.Items) {
                         try {
                             await apiGateway.send(new PostToConnectionCommand({
                                 ConnectionId: connection.connectionId,
                                 Data: Buffer.from(JSON.stringify(notificationPayload))
                             }));
-                            console.log(`✅ Group notification sent to ${participantId} (${connection.connectionId})`);
+                            successCount++;
+                            console.log(`✅ Sent to ${participantId} (${connection.connectionId})`);
                         } catch (error) {
                             if (error.statusCode === 410) {
+                                // Stale connection - remove it
                                 console.log(`🧹 Removing stale connection: ${connection.connectionId}`);
                                 await docClient.send(new DeleteCommand({
                                     TableName: CONNECTIONS_TABLE,
                                     Key: { connectionId: connection.connectionId }
                                 }));
                             } else {
-                                console.error(`❌ Error sending to ${connection.connectionId}:`, error);
+                                console.error(`❌ Failed to send to ${connection.connectionId}:`, error.message);
+                                failCount++;
                             }
                         }
                     }
                 } else {
-                    console.log(`📴 Participant ${participantId} is offline - will receive group on reconnect`);
+                    console.log(`📴 User ${participantId} is offline`);
                 }
             } catch (error) {
-                console.error(`❌ Error processing participant ${participantId}:`, error);
+                console.error(`❌ Error processing user ${participantId}:`, error.message);
+                failCount++;
             }
         }
+        
+        console.log(`📊 Broadcast complete: ${successCount} sent, ${failCount} failed`);
         
         return {
             statusCode: 200,
             body: JSON.stringify({
-                message: 'Group created',
-                conversationId: conversationId
+                message: 'Group created successfully',
+                conversationId: conversationId,
+                notified: successCount,
+                failed: failCount
             })
         };
         
     } catch (error) {
-        console.error('❌ Error creating group:', error);
+        console.error('❌ Fatal error:', error.message);
+        console.error('Stack:', error.stack);
+        
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'Failed to create group' })
+            body: JSON.stringify({ error: 'Internal server error' })
         };
     }
 };
-
