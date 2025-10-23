@@ -23,10 +23,15 @@ struct ConversationListView: View {
         DatabaseService(modelContext: modelContext)
     }
     
+    // Filter out deleted conversations to prevent crashes
+    private var activeConversations: [ConversationData] {
+        conversations.filter { !$0.isDeleted }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                if conversations.isEmpty {
+                if activeConversations.isEmpty {
                     // Empty state
                     VStack(spacing: 20) {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -56,7 +61,7 @@ struct ConversationListView: View {
                 } else {
                     // Conversation list
                     List {
-                        ForEach(conversations) { conversation in
+                        ForEach(activeConversations) { conversation in
                             NavigationLink(value: conversation) {
                                 ConversationRow(conversation: conversation)
                             }
@@ -69,8 +74,8 @@ struct ConversationListView: View {
             }
             .navigationTitle("Messages")
             .navigationDestination(for: ConversationData.self) { convo in
-                // Ensure conversation still exists before navigating
-                if conversations.contains(where: { $0.id == convo.id }) {
+                // Ensure conversation still exists and is not deleted before navigating
+                if activeConversations.contains(where: { $0.id == convo.id }) && !convo.isDeleted {
                     ChatView(conversation: convo)
                 } else {
                     EmptyView()
@@ -128,9 +133,16 @@ struct ConversationListView: View {
     
     private func deleteConversations(at offsets: IndexSet) {
         // Convert IndexSet to array of conversations before deletion
-        let conversationsToDelete = offsets.map { conversations[$0] }
+        // Use activeConversations since that's what's displayed in the list
+        let conversationsToDelete = offsets.compactMap { index in
+            guard index < activeConversations.count else { return nil }
+            return activeConversations[index]
+        }
         
         for conversation in conversationsToDelete {
+            // Skip if already deleted
+            guard !conversation.isDeleted else { continue }
+            
             print("🗑️ Deleting conversation: \(conversation.id)")
             
             // Delete any draft for this conversation first
@@ -212,7 +224,8 @@ struct ConversationRow: View {
     
     // Get recipient ID (other participant in conversation)
     private var recipientId: String? {
-        conversation.participantIds.first { $0 != authViewModel.currentUser?.id }
+        guard !conversation.isDeleted else { return nil }
+        return conversation.participantIds.first { $0 != authViewModel.currentUser?.id }
     }
     
     // Check if recipient is online
@@ -227,6 +240,17 @@ struct ConversationRow: View {
     }
     
     var body: some View {
+        // Safety check: Don't render if conversation appears to be deleted
+        Group {
+            if conversation.isDeleted {
+                EmptyView()
+            } else {
+                rowContent
+            }
+        }
+    }
+    
+    private var rowContent: some View {
         HStack(spacing: 12) {
             // Avatar with online indicator
             ZStack(alignment: .bottomTrailing) {
@@ -315,15 +339,21 @@ struct ConversationRow: View {
     }
     
     private var displayName: String {
+        // Safety check for deleted conversations
+        guard !conversation.isDeleted else {
+            return "Deleted Conversation"
+        }
+        
         if conversation.isGroupChat {
             return conversation.groupName ?? "Group Chat"
         } else {
             // Get other participant's name (not current user)
             // Safety: Handle empty participantNames array
-            guard !conversation.participantNames.isEmpty else {
+            let names = conversation.participantNames
+            guard !names.isEmpty else {
                 return "Unknown User"
             }
-            return conversation.participantNames.first ?? "Unknown User"
+            return names.first ?? "Unknown User"
         }
     }
     
