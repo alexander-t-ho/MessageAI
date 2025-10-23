@@ -1174,7 +1174,8 @@ struct MessageBubble: View {
                 Spacer(minLength: 60)
             }
         } // End of HStack
-        } // End of else (non-deleted messages) and body
+        } // End of else (non-deleted messages)
+    } // End of body
     
     private var isFromCurrentUser: Bool {
         message.isSentBy(userId: currentUserId) // ✅ Now uses real current user ID!
