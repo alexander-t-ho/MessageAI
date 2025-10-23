@@ -61,6 +61,7 @@ struct MessageStatusPayload: Codable {
     let conversationId: String
     let status: String // delivered | read
     let readerId: String?
+    let readAt: String?
 }
 
 /// WebSocket Service - Manages real-time messaging connection
@@ -75,6 +76,7 @@ class WebSocketService: ObservableObject {
     @Published var statusUpdates: [MessageStatusPayload] = []
     @Published var userPresence: [String: Bool] = [:] // userId -> online
     @Published var simulateOffline: Bool = false // if true, never connect/send
+    @Published var catchUpCounter: Int = 0 // increments when catch-up completes
     
     // MARK: - Private Properties
     
@@ -269,6 +271,18 @@ class WebSocketService: ObservableObject {
         print("✅ Connected to WebSocket")
         // Presence broadcast disabled to avoid server errors
 
+        // Announce a lightweight ping so backend can record/refresh latest connection
+        let pingPayload: [String: Any] = [
+            "action": "ping",
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: pingPayload),
+           let json = String(data: data, encoding: .utf8) {
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error { print("❌ ping send error: \(error.localizedDescription)") }
+            }
+        }
+
         // Force catch-up on reconnect to ensure missed messages are delivered
         if let uid = self.userId {
             let payload: [String: Any] = [
@@ -356,9 +370,13 @@ class WebSocketService: ObservableObject {
                     deletedMessages.append(payload)
                 } else if let type = json["type"] as? String, type == "messageStatus",
                           let statusData = json["data"] as? [String: Any] {
+                    print("📬 Raw status data received: \(statusData)")
                     let payload = try JSONDecoder().decode(MessageStatusPayload.self, from: JSONSerialization.data(withJSONObject: statusData))
-                    print("📬 Status update received: \\n   id=\(payload.messageId) status=\(payload.status)")
+                    print("📬 Status update decoded: id=\(payload.messageId) status=\(payload.status) readAt=\(payload.readAt ?? "nil")")
                     statusUpdates.append(payload)
+                } else if let type = json["type"] as? String, type == "catchUpComplete" {
+                    // Signal catch-up completion
+                    catchUpCounter += 1
                 } else if let type = json["type"] as? String, type == "presence",
                           let presence = json["data"] as? [String: Any],
                           let userId = presence["userId"] as? String,
@@ -375,18 +393,21 @@ class WebSocketService: ObservableObject {
     }
 
     // Send markRead for a batch of messages in a conversation
-    func sendMarkRead(conversationId: String, readerId: String, messageIds: [String]) {
+    func sendMarkRead(conversationId: String, readerId: String, messageReads: [[String: String]]) {
         guard connectionState == .connected else { return }
-        guard !messageIds.isEmpty else { return }
+        guard !messageReads.isEmpty else { return }
+        let messageIds = messageReads.compactMap { $0["messageId"] }
         let payload: [String: Any] = [
             "action": "markRead",
             "conversationId": conversationId,
             "readerId": readerId,
-            "messageIds": messageIds
+            "reads": messageReads,
+            "messageIds": messageIds,
+            "readAt": ISO8601DateFormatter().string(from: Date())
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
-            print("📤 Sending markRead for \(messageIds.count) messages in convo \(conversationId)")
+            print("📤 Sending markRead for \(messageReads.count) messages (ids=\(messageIds)) in convo \(conversationId)")
             webSocketTask?.send(.string(json)) { error in
                 if let error = error { print("❌ markRead send error: \(error.localizedDescription)") }
             }

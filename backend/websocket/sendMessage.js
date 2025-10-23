@@ -97,7 +97,7 @@ export const handler = async (event) => {
                 endpoint: `https://${domain}/${stage}`
             });
             
-            const sendPromises = recipientConnections.Items.map(async (connection) => {
+            const results = await Promise.all((recipientConnections.Items || []).map(async (connection) => {
                 try {
                     await apiGateway.send(new PostToConnectionCommand({
                         ConnectionId: connection.connectionId,
@@ -117,11 +117,10 @@ export const handler = async (event) => {
                             }
                         }))
                     }));
-                    
                     console.log(`✅ Message sent to connection: ${connection.connectionId}`);
+                    return true;
                 } catch (error) {
                     if (error.statusCode === 410) {
-                        // Connection is stale, remove it
                         console.log(`🧹 Removing stale connection: ${connection.connectionId}`);
                         await docClient.send(new DeleteCommand({
                             TableName: CONNECTIONS_TABLE,
@@ -130,12 +129,14 @@ export const handler = async (event) => {
                     } else {
                         console.error(`❌ Error sending to ${connection.connectionId}:`, error);
                     }
+                    return false;
                 }
-            });
-            
-            await Promise.all(sendPromises);
-            // Also send a delivery status ack back to sender's connections
-            try {
+            }));
+
+            const anyDelivered = results.some(Boolean);
+
+            // Send status ack back to sender only if at least one recipient connection succeeded
+            if (anyDelivered) try {
                 const senderConnections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,
                     IndexName: 'userId-index',
@@ -163,9 +164,9 @@ export const handler = async (event) => {
             return {
                 statusCode: 200,
                 body: JSON.stringify({
-                    message: 'Message sent',
+                    message: 'Message processed',
                     messageId: messageId,
-                    status: 'delivered'
+                    status: anyDelivered ? 'delivered' : 'sent'
                 })
             };
         } else {

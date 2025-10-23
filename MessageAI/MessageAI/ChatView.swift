@@ -25,6 +25,10 @@ struct ChatView: View {
     @State private var messageToForward: MessageData?
     @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
+    @State private var isAtBottom: Bool = false // true when user is viewing the latest message
+    @State private var refreshTick: Int = 0 // forces UI refresh on status updates
+    @State private var userHasManuallyScrolledUp: Bool = false // disables auto-scroll until back at bottom
+    @State private var scrollToBottomTick: Int = 0 // trigger to request bottom scroll inside ScrollViewReader
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -78,6 +82,8 @@ struct ChatView: View {
                             MessageBubble(
                                 message: message,
                                 currentUserId: currentUserId, // Pass current user ID for bubble placement
+                                lastReadMessageId: lastReadOutgoingId,
+                                refreshKey: refreshTick,
                                 onReply: { replyToMessage(message) },
                                 onDelete: { deleteMessage(message) },
                                 onEmphasize: { toggleEmphasis(message) },
@@ -86,19 +92,53 @@ struct ChatView: View {
                             )
                             .id(message.id)
                         }
+                        // Sentinel to detect when user is at bottom
+                        Color.clear
+                            .frame(height: 1)
+                            .onAppear {
+                                print("📍 Sentinel at bottom appeared → isAtBottom=true")
+                                isAtBottom = true
+                                userHasManuallyScrolledUp = false
+                                // Small delay to ensure all messages are loaded
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    markVisibleIncomingAsRead()
+                                }
+                            }
+                            .onDisappear {
+                                print("📍 Sentinel left viewport → isAtBottom=false")
+                                isAtBottom = false
+                            }
                     }
                     .padding()
                 }
+                // Detect user scrolling intent: dragging down (content pulled down) means user wants to read older messages
+                .gesture(
+                    DragGesture().onChanged { value in
+                        if value.translation.height > 20 { // user dragged downwards to see older messages
+                            userHasManuallyScrolledUp = true
+                        }
+                    }
+                    .onEnded { _ in
+                        // If we ended a gesture and we're at bottom, re-enable auto-scroll
+                        if isAtBottom { userHasManuallyScrolledUp = false }
+                    }
+                )
                 .onChange(of: queriedMessages.count) { oldCount, newCount in
                     print("📊 Messages count changed: \(oldCount) → \(newCount)")
                     // Update visible messages when query changes
                     visibleMessages = queriedMessages
                     
-                    // Auto-scroll to bottom when new message arrives
-                    if newCount > oldCount, let lastMessage = visibleMessages.last {
-                        withAnimation {
-                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                        }
+                    // Always auto-scroll to bottom when a new message arrives
+                    if newCount > oldCount {
+                        scrollToBottomTick += 1
+                    }
+                    // Phase 6: mark visible incoming as read
+                    markVisibleIncomingAsRead()
+                }
+                .onChange(of: scrollToBottomTick) { _, _ in
+                    if let lastMessage = visibleMessages.last {
+                        withAnimation { proxy.scrollTo(lastMessage.id, anchor: .bottom) }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { isAtBottom = true }
                     }
                 }
                 .onAppear {
@@ -111,13 +151,20 @@ struct ChatView: View {
                     if let lastMessage = visibleMessages.last {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                            // Assume we are at bottom after programmatic scroll
+                            isAtBottom = true
+                            userHasManuallyScrolledUp = false
+                            markVisibleIncomingAsRead()
                         }
                     }
                     
                     // Load draft
                     loadDraft()
 
-                    // Phase 6 read receipts removed on phase-5 branch
+                    // Phase 6: attempt to mark current messages as read when at bottom
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        markVisibleIncomingAsRead()
+                    }
 
                     // Ensure WebSocket is connected when entering chat
                     let isConnected: Bool = {
@@ -223,6 +270,14 @@ struct ChatView: View {
             // New message received via WebSocket
             if newCount > oldCount, let newMessage = webSocketService.receivedMessages.last {
                 handleReceivedMessage(newMessage)
+                // Keep at bottom unless user scrolled up
+                // Always keep at bottom on new incoming message
+                scrollToBottomTick += 1
+                // Mark any now-visible incoming as read (only if at bottom)
+                // Add a small delay to ensure the message is added to visibleMessages
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    markVisibleIncomingAsRead()
+                }
             }
         }
         .onChange(of: webSocketService.deletedMessages.count) { old, new in
@@ -230,7 +285,27 @@ struct ChatView: View {
                 handleDeletedMessage(payload)
             }
         }
-        // No statusUpdates on phase-5
+        // After catch-up completes, force-scroll to bottom and mark all visible incoming as read
+        .onChange(of: webSocketService.catchUpCounter) { _, _ in
+            print("📦 catchUpComplete observed in ChatView → attempting read sync")
+            // Force we are at bottom and re-evaluate
+            isAtBottom = true
+            userHasManuallyScrolledUp = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                markVisibleIncomingAsRead()
+            }
+        }
+        .onChange(of: webSocketService.statusUpdates.count) { old, new in
+            if new > old, let payload = webSocketService.statusUpdates.last {
+                handleStatusUpdate(payload)
+                // Refresh visible list and tick UI so lastReadOutgoingId recalculates
+                visibleMessages = queriedMessages
+                refreshTick += 1
+                // Keep bottom aligned for live updates unless user scrolled up
+                // Keep bottom aligned for live updates
+                scrollToBottomTick += 1
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -241,6 +316,14 @@ struct ChatView: View {
         } else {
             return conversation.participantNames.first ?? "Unknown"
         }
+    }
+
+    // The most recent outgoing message that has been read
+    private var lastReadOutgoingId: String? {
+        visibleMessages
+            .filter { $0.senderId == currentUserId && $0.isRead }
+            .sorted { $0.timestamp < $1.timestamp }
+            .last?.id
     }
     
     private var isPeerOnline: Bool {
@@ -478,6 +561,7 @@ struct ChatView: View {
     
     private func handleReceivedMessage(_ payload: MessagePayload) {
         print("📥 Handling received WebSocket message: \(payload.messageId)")
+        print("   From: \(payload.senderId), Current user: \(currentUserId)")
         
         // Only handle messages for this conversation
         guard payload.conversationId == conversation.id else {
@@ -526,7 +610,15 @@ struct ChatView: View {
             conversation.lastMessageTime = timestamp
             try modelContext.save()
             
-            print("✅ Message added to conversation")
+            print("✅ Message added to conversation, count: \(visibleMessages.count)")
+            
+            // If this is an incoming message and we're at the bottom, mark it as read immediately
+            if payload.senderId != currentUserId && isAtBottom {
+                print("📤 New incoming message while at bottom, marking as read")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    markVisibleIncomingAsRead()
+                }
+            }
         } catch {
             print("❌ Error saving received message: \(error)")
         }
@@ -550,8 +642,93 @@ struct ChatView: View {
             visibleMessages.removeAll { $0.id == payload.messageId }
         }
     }
-
-    // No message status handler on phase-5
+    
+    // Phase 6: handle delivery/read status updates (includes readAt timestamp)
+    private func handleStatusUpdate(_ payload: MessageStatusPayload) {
+        guard payload.conversationId == conversation.id else { return }
+        print("📬 handleStatusUpdate: messageId=\(payload.messageId) status=\(payload.status) readAt=\(payload.readAt ?? "nil")")
+        do {
+            let fetch = FetchDescriptor<MessageData>()
+            let msgs = try modelContext.fetch(fetch).filter { $0.conversationId == conversation.id && !$0.isDeleted }
+            
+            if payload.status == "read" {
+                // For read status, we need to find the latest outgoing message and mark only that as read
+                // Clear ALL previous outgoing read flags first
+                for m in msgs where m.senderId == currentUserId {
+                    m.isRead = false
+                    m.readAt = nil
+                }
+                
+                // Find the specific message from the payload
+                if let msg = msgs.first(where: { $0.id == payload.messageId && $0.senderId == currentUserId }) {
+                    print("   Found outgoing message to mark as read: \(msg.id)")
+                    msg.status = "read"
+                    msg.isRead = true
+                    
+                    // Always set a readAt timestamp
+                    if let s = payload.readAt {
+                        if let d = ISO8601DateFormatter().date(from: s) {
+                            msg.readAt = d
+                            print("   ✅ Set readAt from server=\(d) for message \(msg.id)")
+                        } else {
+                            // Failed to parse, use current time
+                            msg.readAt = Date()
+                            print("   ⚠️ Failed to parse readAt timestamp: \(s), using current time")
+                        }
+                    } else {
+                        // No timestamp provided, use current time
+                        msg.readAt = Date()
+                        print("   ⚠️ No readAt timestamp in payload, using current time")
+                    }
+                } else {
+                    print("   ⚠️ Message not found or not outgoing: \(payload.messageId)")
+                }
+            } else {
+                // For other statuses (delivered, etc), just update the specific message
+                if let msg = msgs.first(where: { $0.id == payload.messageId }) {
+                    print("   Found message to update: current status=\(msg.status)")
+                    msg.status = payload.status
+                } else {
+                    print("   ⚠️ Message not found in database: \(payload.messageId)")
+                }
+            }
+            
+            try modelContext.save()
+            print("   ✅ Saved status update to database")
+        } catch {
+            print("❌ Error applying status update: \(error)")
+        }
+    }
+    
+    // Phase 6: send markRead for any incoming messages that are now visible and not yet read
+    private func markVisibleIncomingAsRead() {
+        guard isAtBottom else { 
+            print("📤 markVisibleIncomingAsRead skipped: isAtBottom=\(isAtBottom)")
+            return 
+        }
+        let reads = visibleMessages
+            .filter { $0.conversationId == conversation.id && !$0.isDeleted }
+            .filter { $0.senderId != currentUserId }
+            .filter { !$0.isRead }
+            .map { (id: $0.id, senderId: $0.senderId) }
+        guard !reads.isEmpty else { 
+            print("📤 markVisibleIncomingAsRead: no unread incoming messages to mark")
+            return 
+        }
+        print("📤 markVisibleIncomingAsRead sending for \(reads.count) messages: ids=\(reads.map{ $0.id }) isAtBottom=\(isAtBottom)")
+        // Optimistically set read locally
+        for m in visibleMessages where reads.contains(where: { $0.id == m.id }) {
+            m.isRead = true
+            m.readAt = Date() // Set local readAt timestamp
+        }
+        do { try modelContext.save() } catch { print("❌ Error saving read flags: \(error)") }
+        // Send to server with senderId to avoid race on GetItem
+        webSocketService.sendMarkRead(
+            conversationId: conversation.id,
+            readerId: currentUserId,
+            messageReads: reads.map { ["messageId": $0.id, "senderId": $0.senderId] }
+        )
+    }
     
     private func forwardToConversation(_ message: MessageData, to targetConversation: ConversationData) {
         // Create a new message in the target conversation
@@ -597,6 +774,8 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: MessageData
     let currentUserId: String // ✅ Added to determine bubble placement
+    let lastReadMessageId: String?
+    let refreshKey: Int
     let onReply: () -> Void
     let onDelete: () -> Void
     let onEmphasize: () -> Void
@@ -604,11 +783,15 @@ struct MessageBubble: View {
     let onTapReply: (String) -> Void
     
     @State private var swipeOffset: CGFloat = 0
+    @State private var showTimestamp: Bool = false
+    @State private var hideDeliveredStatus: Bool = false
+    @State private var lastStatus: String = ""
     
     // Determine if this is the last outgoing message that is read
     private var isLastOutgoingRead: Bool {
         guard message.isSentBy(userId: currentUserId) else { return false }
-        return message.isRead
+        guard let lastId = lastReadMessageId else { return false }
+        return message.id == lastId
     }
 
     var body: some View {
@@ -686,43 +869,82 @@ struct MessageBubble: View {
                         }
                     }
                 
-                // Timestamp and status
+                // Timestamp is hidden by default; shown only on light right-swipe
                 HStack(spacing: 4) {
-                    Text(formatTime(message.timestamp))
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                    
-                    if isFromCurrentUser {
+                    if showTimestamp {
+                        Text(formatTime(message.timestamp))
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                    // Keep status icon visible for outgoing messages UNLESS showing read receipt
+                    if isFromCurrentUser && !isLastOutgoingRead {
                         statusIcon
                     }
                 }
                 // Read receipt label shown only for the most recent outgoing message
                 if isFromCurrentUser, isLastOutgoingRead {
-                    Text("Read")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                        .padding(.top, 2)
+                    HStack(spacing: 4) {
+                        Text("Read")
+                        if let t = message.readAt {
+                            Text(readTime(t))
+                        }
+                        // Blue check in a circle
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue)
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .padding(.top, 2)
                 }
             }
             .offset(x: swipeOffset)
+            // force view refresh when status updates tick changes so latest read attaches correctly
+            .id(refreshKey)
+            .onChange(of: message.status) { oldValue, newValue in
+                // Reset hide flag when status changes
+                if oldValue != newValue {
+                    hideDeliveredStatus = false
+                    lastStatus = newValue
+                }
+            }
+            .onAppear {
+                lastStatus = message.status
+            }
             } // Close ZStack
             .gesture(
                 DragGesture()
                     .onChanged { value in
                         let translation = value.translation.width
-                        // Swipe RIGHT for reply only
+                        // thresholds: light reveal vs reply
+                        let revealThreshold: CGFloat = 10
+                        let replyThreshold: CGFloat = 30
+                        // Swipe RIGHT interactions only
                         if translation > 0 {
                             swipeOffset = min(translation, 60)
+                            // Reveal timestamp on light swipe
+                            showTimestamp = translation > revealThreshold
                         } else {
-                            swipeOffset = 0 // No swipe left action
+                            swipeOffset = 0
+                            showTimestamp = false
                         }
                     }
                     .onEnded { value in
-                        if swipeOffset > 30 {
-                            // Trigger reply (swipe right)
+                        let translation = value.translation.width
+                        let replyThreshold: CGFloat = 30
+                        if translation > replyThreshold {
+                            // Trigger reply (strong swipe right)
                             onReply()
                         }
-                        // Animate back to original position
+                        // Keep timestamp briefly if it was revealed by a light swipe
+                        if showTimestamp {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showTimestamp = false
+                                }
+                            }
+                        }
+                        // Reset swipe offset
                         withAnimation(.spring()) {
                             swipeOffset = 0
                         }
@@ -764,33 +986,42 @@ struct MessageBubble: View {
     
     @ViewBuilder
     private var statusIcon: some View {
-        switch message.status {
-        case "sending":
-            Image(systemName: "clock.fill")
-                .font(.caption2)
-                .foregroundColor(.gray)
-        case "sent":
-            Image(systemName: "checkmark")
-                .font(.caption2)
-                .foregroundColor(.gray)
-        case "delivered":
-            HStack(spacing: -4) {
+        if !hideDeliveredStatus {
+            switch message.status {
+            case "sending":
+                Image(systemName: "clock.fill")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            case "sent":
                 Image(systemName: "checkmark")
-                Image(systemName: "checkmark")
-                    .offset(x: 4)
-            }
-            .font(.caption2)
-            .foregroundColor(.blue)
-        case "read":
-            Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            case "delivered":
+                HStack(spacing: -4) {
+                    Image(systemName: "checkmark")
+                    Image(systemName: "checkmark")
+                        .offset(x: 4)
+                }
                 .font(.caption2)
                 .foregroundColor(.blue)
-        case "failed":
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.caption2)
-                .foregroundColor(.red)
-        default:
-            EmptyView()
+                .onAppear {
+                    // Hide delivered status after 3 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            hideDeliveredStatus = true
+                        }
+                    }
+                }
+            case "read":
+                // Don't show the status icon for read - it's shown in the read receipt
+                EmptyView()
+            case "failed":
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundColor(.red)
+            default:
+                EmptyView()
+            }
         }
     }
     
@@ -809,6 +1040,12 @@ struct MessageBubble: View {
             formatter.timeStyle = .short
             return formatter.string(from: date)
         }
+    }
+
+    private func readTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 

@@ -76,9 +76,27 @@ export const handler = async (event) => {
           },
         })),
       }));
+
+      // Also notify the sender that delivery has occurred now that recipient reconnected
+      try {
+        const senderConnections = await docClient.send(new QueryCommand({
+          TableName: CONNECTIONS_TABLE,
+          IndexName: 'userId-index',
+          KeyConditionExpression: 'userId = :u',
+          ExpressionAttributeValues: { ':u': m.senderId }
+        }));
+        for (const c of (senderConnections.Items || [])) {
+          await api.send(new PostToConnectionCommand({
+            ConnectionId: c.connectionId,
+            Data: Buffer.from(JSON.stringify({ type: 'messageStatus', data: { messageId: m.messageId, conversationId: m.conversationId, status: 'delivered' } }))
+          }));
+        }
+      } catch (e) {
+        console.error('catchUp: notify sender delivery error', e);
+      }
     }
 
-    // Send summary
+    // Send summary (recipient should auto mark read if at bottom)
     await api.send(new PostToConnectionCommand({
       ConnectionId: connectionId,
       Data: Buffer.from(JSON.stringify({ type: "catchUpComplete", data: { count: (resp.Items && resp.Items.length) || 0 } }))

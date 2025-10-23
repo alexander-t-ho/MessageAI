@@ -19,6 +19,7 @@ final class MessageData {
     var timestamp: Date
     var status: String // "sending", "sent", "delivered", "read", "failed"
     var isRead: Bool
+    var readAt: Date?
     // NOTE: isSentByCurrentUser is NO LONGER stored - it's computed on the fly!
     // This is because the SAME message should appear differently for sender vs receiver
     
@@ -43,6 +44,7 @@ final class MessageData {
         timestamp: Date = Date(),
         status: String = "sending",
         isRead: Bool = false,
+        readAt: Date? = nil,
         replyToMessageId: String? = nil,
         replyToContent: String? = nil,
         replyToSenderName: String? = nil,
@@ -58,6 +60,7 @@ final class MessageData {
         self.timestamp = timestamp
         self.status = status
         self.isRead = isRead
+        self.readAt = readAt
         // No longer setting isSentByCurrentUser here!
         self.replyToMessageId = replyToMessageId
         self.replyToContent = replyToContent
