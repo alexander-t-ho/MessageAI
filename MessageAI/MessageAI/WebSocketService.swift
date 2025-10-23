@@ -632,7 +632,7 @@ class WebSocketService: ObservableObject {
     }
 
     // Send markRead for a batch of messages in a conversation
-    func sendMarkRead(conversationId: String, readerId: String, messageReads: [[String: String]]) {
+    func sendMarkRead(conversationId: String, readerId: String, readerName: String, messageReads: [[String: String]], isGroupChat: Bool = false) {
         guard connectionState == .connected else { return }
         guard !messageReads.isEmpty else { return }
         let messageIds = messageReads.compactMap { $0["messageId"] }
@@ -640,13 +640,18 @@ class WebSocketService: ObservableObject {
             "action": "markRead",
             "conversationId": conversationId,
             "readerId": readerId,
+            "readerName": readerName,
             "reads": messageReads,
             "messageIds": messageIds,
-            "readAt": ISO8601DateFormatter().string(from: Date())
+            "readAt": ISO8601DateFormatter().string(from: Date()),
+            "isGroupChat": isGroupChat
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
             print("📤 Sending markRead for \(messageReads.count) messages (ids=\(messageIds)) in convo \(conversationId)")
+            if isGroupChat {
+                print("   👥 Group chat - tracking read by \(readerName)")
+            }
             webSocketTask?.send(.string(json)) { error in
                 if let error = error { print("❌ markRead send error: \(error.localizedDescription)") }
             }

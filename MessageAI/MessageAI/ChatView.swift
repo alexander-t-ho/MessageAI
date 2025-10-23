@@ -910,7 +910,9 @@ struct ChatView: View {
         webSocketService.sendMarkRead(
             conversationId: conversation.id,
             readerId: currentUserId,
-            messageReads: reads.map { ["messageId": $0.id, "senderId": $0.senderId] }
+            readerName: currentUserName,
+            messageReads: reads.map { ["messageId": $0.id, "senderId": $0.senderId] },
+            isGroupChat: conversation.isGroupChat
         )
     }
     
