@@ -134,7 +134,7 @@ struct ConversationListView: View {
     private func deleteConversations(at offsets: IndexSet) {
         // Convert IndexSet to array of conversations before deletion
         // Use activeConversations since that's what's displayed in the list
-        let conversationsToDelete = offsets.compactMap { index in
+        let conversationsToDelete: [ConversationData] = offsets.compactMap { index in
             guard index < activeConversations.count else { return nil }
             return activeConversations[index]
         }
