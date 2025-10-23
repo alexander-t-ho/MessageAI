@@ -1176,7 +1176,7 @@ struct MessageBubble: View {
             }
         } // End of HStack
         } // End of else (non-deleted messages)
-    }
+    } // End of body
     
     private var isFromCurrentUser: Bool {
         message.isSentBy(userId: currentUserId) // ✅ Now uses real current user ID!
@@ -1245,6 +1245,7 @@ struct MessageBubble: View {
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
+} // End of MessageBubble struct
 
 // MARK: - Typing Dot Animation
 
