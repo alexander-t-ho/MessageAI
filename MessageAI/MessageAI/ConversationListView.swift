@@ -122,11 +122,21 @@ struct ConversationListView: View {
     
     private func deleteConversations(at offsets: IndexSet) {
         for index in offsets {
+            guard index < conversations.count else { continue }
             let conversation = conversations[index]
+            
+            print("🗑️ Deleting conversation: \(conversation.id)")
+            
+            // Delete any draft for this conversation first
+            if let draft = try? modelContext.fetch(FetchDescriptor<DraftData>()).first(where: { $0.conversationId == conversation.id }) {
+                modelContext.delete(draft)
+            }
+            
             do {
                 try databaseService.deleteConversation(conversationId: conversation.id)
+                print("✅ Conversation deleted successfully")
             } catch {
-                print("Error deleting conversation: \(error)")
+                print("❌ Error deleting conversation: \(error)")
             }
         }
     }

@@ -12,6 +12,7 @@ struct ChatView: View {
     let conversation: ConversationData
     
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var webSocketService: WebSocketService
     @Query private var allMessages: [MessageData]
@@ -54,12 +55,16 @@ struct ChatView: View {
     
     // Get recipient ID (other participant in conversation)
     private var recipientId: String {
-        conversation.participantIds.first { $0 != currentUserId } ?? "unknown-recipient"
+        // Safe access in case conversation is deleted
+        guard !conversation.isDeleted else { return "unknown-recipient" }
+        return conversation.participantIds.first { $0 != currentUserId } ?? "unknown-recipient"
     }
     
     // Computed messages from query (for reference)
     private var queriedMessages: [MessageData] {
-        allMessages
+        // Safe access in case conversation is deleted
+        guard !conversation.isDeleted else { return [] }
+        return allMessages
             .filter { $0.conversationId == conversation.id && !$0.isDeleted }
             .sorted { $0.timestamp < $1.timestamp }
     }
@@ -75,9 +80,23 @@ struct ChatView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Messages list
-            ScrollViewReader { proxy in
+        // Check if conversation is deleted and show empty state
+        if conversation.isDeleted {
+            ContentUnavailableView(
+                "Conversation Deleted",
+                systemImage: "trash",
+                description: Text("This conversation has been deleted")
+            )
+            .onAppear {
+                // Auto-dismiss after a short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    dismiss()
+                }
+            }
+        } else {
+            VStack(spacing: 0) {
+                // Messages list
+                ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(visibleMessages) { message in
@@ -223,6 +242,14 @@ struct ChatView: View {
                     }
                 }
             }
+            // Check if conversation still exists
+            .onChange(of: allConversations.count) { _, _ in
+                // If conversation is no longer in the list, dismiss the view
+                if !allConversations.contains(where: { $0.id == conversation.id }) {
+                    print("⚠️ Conversation deleted, dismissing ChatView")
+                    dismiss()
+                }
+            }
             
             // Reply banner (shown when replying to a message)
             if let replyMessage = replyingToMessage {
@@ -290,6 +317,7 @@ struct ChatView: View {
             // Clean up typing indicator when leaving chat
             sendTypingIndicator(isTyping: false)
         }
+        }  // End of else block for deleted conversation check
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

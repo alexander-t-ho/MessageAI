@@ -140,15 +140,31 @@ class DatabaseService {
     
     /// Delete a conversation and all its messages
     func deleteConversation(conversationId: String) throws {
+        print("🗑️ DatabaseService: Starting deletion of conversation \(conversationId)")
+        
         // Delete all messages in conversation
         let messages = try fetchMessages(for: conversationId)
+        print("📧 Found \(messages.count) messages to delete")
         for message in messages {
             modelContext.delete(message)
+        }
+        
+        // Delete any pending messages for this conversation
+        let pendingDescriptor = FetchDescriptor<PendingMessageData>()
+        if let pendingMessages = try? modelContext.fetch(pendingDescriptor) {
+            let conversationPending = pendingMessages.filter { $0.conversationId == conversationId }
+            print("📤 Found \(conversationPending.count) pending messages to delete")
+            for pending in conversationPending {
+                modelContext.delete(pending)
+            }
         }
         
         // Delete conversation
         if let conversation = try fetchConversation(id: conversationId) {
             modelContext.delete(conversation)
+            print("✅ Conversation object deleted")
+        } else {
+            print("⚠️ Conversation not found for deletion")
         }
         
         try modelContext.save()
