@@ -46,7 +46,9 @@ export const handler = async (event) => {
         participantNames,
         createdBy,
         createdByName,
-        timestamp
+        timestamp,
+        groupAdmins,
+        createdAt
     } = groupData;
     
     console.log(`👥 Group Name: ${groupName}`);
@@ -56,11 +58,18 @@ export const handler = async (event) => {
     // Validate required fields
     if (!conversationId || !participantIds || !Array.isArray(participantIds) || participantIds.length < 2) {
         console.error('❌ Missing or invalid required fields');
+        console.error(`   conversationId: ${conversationId}`);
+        console.error(`   participantIds: ${JSON.stringify(participantIds)}`);
+        console.error(`   participantIds.length: ${participantIds?.length}`);
+        console.error(`   groupName: ${groupName}`);
+        console.error(`   createdBy: ${createdBy}`);
         return {
             statusCode: 400,
             body: JSON.stringify({ error: 'Missing or invalid required fields' })
         };
     }
+    
+    console.log('✅ Validation passed, processing group creation...');
     
     try {
         // 1. Save group conversation to DynamoDB
@@ -74,8 +83,8 @@ export const handler = async (event) => {
                 groupName: groupName || 'Group Chat',
                 createdBy: createdBy,
                 createdByName: createdByName,
-                createdAt: timestamp || new Date().toISOString(),
-                groupAdmins: [createdBy],
+                createdAt: createdAt || timestamp || new Date().toISOString(),
+                groupAdmins: groupAdmins || [createdBy],
                 lastUpdatedAt: timestamp || new Date().toISOString()
             }
         }));
@@ -98,15 +107,16 @@ export const handler = async (event) => {
                 isGroupChat: true,
                 createdBy,
                 createdByName,
-                createdAt: timestamp || new Date().toISOString(),
-                groupAdmins: [createdBy]
+                createdAt: createdAt || timestamp || new Date().toISOString(),
+                groupAdmins: groupAdmins || [createdBy]
             }
         };
         
-        // Send to all participants except creator (they already have it locally)
-        const otherParticipants = participantIds.filter(id => id !== createdBy);
+        // Send to ALL participants to ensure everyone gets the group
+        // Including the creator to handle multi-device scenarios
+        console.log(`📨 Broadcasting to ALL ${participantIds.length} participants`);
         
-        for (const participantId of otherParticipants) {
+        for (const participantId of participantIds) {
             try {
                 const connections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,

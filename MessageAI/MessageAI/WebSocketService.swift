@@ -285,6 +285,8 @@ class WebSocketService: ObservableObject {
             "participantNames": participantNames,
             "createdBy": createdBy,
             "createdByName": createdByName,
+            "groupAdmins": [createdBy], // Creator is initial admin
+            "createdAt": ISO8601DateFormatter().string(from: Date()),
             "timestamp": ISO8601DateFormatter().string(from: Date())
         ]
         

@@ -847,7 +847,14 @@ struct NewConversationView: View {
                     createdByName: currentUser.name
                 )
                 
-                print("✅ Created group conversation with \(selectedUsers.count) users")
+                print("✅ Created group conversation with \(selectedUsers.count + 1) users (including self)")
+                print("   Conversation ID: \(conversationId)")
+                print("   Participants: \(participantIds)")
+                
+                // Navigate to the new group conversation after short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    selectedConversation = conversation
+                }
                 dismiss()
             } catch {
                 print("❌ Error creating group conversation: \(error)")
