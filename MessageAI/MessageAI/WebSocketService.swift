@@ -78,6 +78,7 @@ class WebSocketService: ObservableObject {
     @Published var simulateOffline: Bool = false // if true, never connect/send
     @Published var catchUpCounter: Int = 0 // increments when catch-up completes
     @Published var typingUsers: [String: String] = [:] // conversationId -> userName who is typing
+    private var typingTimers: [String: Timer] = [:] // conversationId -> timer for clearing typing status
     
     // MARK: - Private Properties
     
@@ -413,16 +414,33 @@ class WebSocketService: ObservableObject {
                   let conversationId = typingData["conversationId"] as? String,
                   let senderName = typingData["senderName"] as? String,
                   let isTyping = typingData["isTyping"] as? Bool {
-            // Handle typing indicator
+            // Handle typing indicator with persistence
             Task { @MainActor in
                 if isTyping {
+                    // Cancel any existing timer for this conversation
+                    typingTimers[conversationId]?.invalidate()
+                    typingTimers[conversationId] = nil
+                    
+                    // Set typing user
                     typingUsers[conversationId] = senderName
                     print("⌨️ \(senderName) is typing in conversation \(conversationId)")
                     print("⌨️ Current typing users: \(typingUsers)")
                 } else {
-                    typingUsers.removeValue(forKey: conversationId)
-                    print("⌨️ \(senderName) stopped typing")
-                    print("⌨️ Current typing users: \(typingUsers)")
+                    // Keep indicator visible for 2 more seconds after user stops typing
+                    print("⌨️ \(senderName) stopped typing, keeping indicator for 2 seconds")
+                    
+                    // Cancel any existing timer
+                    typingTimers[conversationId]?.invalidate()
+                    
+                    // Start new timer to clear after 2 seconds
+                    typingTimers[conversationId] = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+                        Task { @MainActor [weak self] in
+                            self?.typingUsers.removeValue(forKey: conversationId)
+                            self?.typingTimers[conversationId] = nil
+                            print("⌨️ Typing indicator cleared for conversation \(conversationId)")
+                            print("⌨️ Current typing users: \(self?.typingUsers ?? [:])")
+                        }
+                    }
                 }
             }
         } else {
@@ -585,6 +603,11 @@ class WebSocketService: ObservableObject {
         shouldReconnect = false
         reconnectTimer?.invalidate()
         heartbeatTimer?.invalidate()
+        // Clean up typing timers
+        for timer in typingTimers.values {
+            timer.invalidate()
+        }
+        typingTimers.removeAll()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         print("🔌 WebSocketService deinitialized")
     }

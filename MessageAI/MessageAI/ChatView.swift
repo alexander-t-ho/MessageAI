@@ -32,6 +32,7 @@ struct ChatView: View {
     @State private var scrollToBottomTick: Int = 0 // trigger to request bottom scroll inside ScrollViewReader
     @State private var typingTimer: Timer? = nil // Timer for typing indicator timeout
     @State private var lastTypingTime: Date = Date() // Track last typing activity
+    @State private var typingDotsAnimation: Bool = false // Animation trigger for typing dots
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -55,16 +56,12 @@ struct ChatView: View {
     
     // Get recipient ID (other participant in conversation)
     private var recipientId: String {
-        // Safe access in case conversation is deleted
-        guard !conversation.isDeleted else { return "unknown-recipient" }
-        return conversation.participantIds.first { $0 != currentUserId } ?? "unknown-recipient"
+        conversation.participantIds.first { $0 != currentUserId } ?? "unknown-recipient"
     }
     
     // Computed messages from query (for reference)
     private var queriedMessages: [MessageData] {
-        // Safe access in case conversation is deleted
-        guard !conversation.isDeleted else { return [] }
-        return allMessages
+        allMessages
             .filter { $0.conversationId == conversation.id && !$0.isDeleted }
             .sorted { $0.timestamp < $1.timestamp }
     }
@@ -80,20 +77,6 @@ struct ChatView: View {
     }
     
     var body: some View {
-        // Check if conversation is deleted and show empty state
-        if conversation.isDeleted {
-            ContentUnavailableView(
-                "Conversation Deleted",
-                systemImage: "trash",
-                description: Text("This conversation has been deleted")
-            )
-            .onAppear {
-                // Auto-dismiss after a short delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    dismiss()
-                }
-            }
-        } else {
             VStack(spacing: 0) {
                 // Messages list
                 ScrollViewReader { proxy in
@@ -116,43 +99,43 @@ struct ChatView: View {
                         
                         // Typing indicator as a message bubble (left side)
                         if let typingUser = webSocketService.typingUsers[conversation.id] {
-                            HStack {
-                                VStack(alignment: .leading) {
+                            HStack(alignment: .bottom, spacing: 8) {
+                                // Bubble with animated dots
+                                ZStack {
+                                    // Background bubble
+                                    RoundedRectangle(cornerRadius: 22)
+                                        .fill(Color(.systemGray5))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 22)
+                                                .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                        )
+                                        .frame(width: 70, height: 40)
+                                    
+                                    // Animated dots
                                     HStack(spacing: 4) {
-                                        Circle()
-                                            .fill(Color.gray.opacity(0.6))
-                                            .frame(width: 8, height: 8)
-                                            .scaleEffect(1.2)
-                                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: typingUser)
-                                        
-                                        Circle()
-                                            .fill(Color.gray.opacity(0.6))
-                                            .frame(width: 8, height: 8)
-                                            .scaleEffect(1.2)
-                                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: typingUser)
-                                        
-                                        Circle()
-                                            .fill(Color.gray.opacity(0.6))
-                                            .frame(width: 8, height: 8)
-                                            .scaleEffect(1.2)
-                                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: typingUser)
+                                        TypingDot(delay: 0.0)
+                                        TypingDot(delay: 0.2)
+                                        TypingDot(delay: 0.4)
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 12)
-                                    .background(Color(.systemGray5))
-                                    .cornerRadius(20)
                                 }
-                                .padding(.leading, 0)
                                 
                                 Spacer()
                             }
+                            .padding(.leading, 12)
                             .transition(.asymmetric(
-                                insertion: .scale(scale: 0.8).combined(with: .opacity),
-                                removal: .scale(scale: 0.8).combined(with: .opacity)
+                                insertion: .scale(scale: 0.5, anchor: .bottomLeading)
+                                    .combined(with: .opacity),
+                                removal: .scale(scale: 0.5, anchor: .bottomLeading)
+                                    .combined(with: .opacity)
                             ))
-                            .animation(.easeInOut(duration: 0.2), value: webSocketService.typingUsers.count)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: webSocketService.typingUsers[conversation.id] != nil)
+                            .id("typing-\(typingUser)")
                             .onAppear {
                                 print("🎯 Typing bubble visible for: \(typingUser)")
+                                typingDotsAnimation = true
+                            }
+                            .onDisappear {
+                                typingDotsAnimation = false
                             }
                         }
                         
@@ -387,7 +370,6 @@ struct ChatView: View {
                 scrollToBottomTick += 1
             }
         }
-        }  // End of else block for deleted conversation check
     }
     
     // MARK: - Helper Methods
@@ -854,7 +836,13 @@ struct ChatView: View {
     // Send typing indicator via WebSocket
     private func sendTypingIndicator(isTyping: Bool) {
         print("📤 Sending typing: \(isTyping ? "START" : "STOP") for conversation \(conversation.id)")
-        print("   From: \(currentUserId) to: \(recipientId)")
+        print("   From: \(currentUserId) (\(currentUserName)) to: \(recipientId)")
+        print("   Connection state: \(webSocketService.connectionState)")
+        
+        guard case .connected = webSocketService.connectionState else {
+            print("   ⚠️ Cannot send typing indicator - not connected")
+            return
+        }
         
         webSocketService.sendTyping(
             conversationId: conversation.id,
@@ -1185,6 +1173,30 @@ struct MessageBubble: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Typing Dot Animation
+
+struct TypingDot: View {
+    let delay: Double
+    @State private var isAnimating = false
+    
+    var body: some View {
+        Circle()
+            .fill(Color.gray)
+            .frame(width: 10, height: 10)
+            .scaleEffect(isAnimating ? 1.0 : 0.5)
+            .opacity(isAnimating ? 1.0 : 0.4)
+            .animation(
+                Animation.easeInOut(duration: 0.6)
+                    .repeatForever(autoreverses: true)
+                    .delay(delay),
+                value: isAnimating
+            )
+            .onAppear {
+                isAnimating = true
+            }
     }
 }
 
