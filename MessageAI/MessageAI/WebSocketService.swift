@@ -283,7 +283,8 @@ class WebSocketService: ObservableObject {
         
         // Send online presence after a small delay to ensure connection is fully established
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+            print("🚀 Sending initial presence after connection established")
             sendPresence(isOnline: true)
         }
         
@@ -398,9 +399,14 @@ class WebSocketService: ObservableObject {
                   let userId = presence["userId"] as? String,
                   let isOnline = presence["isOnline"] as? Bool {
             Task { @MainActor in
-                userPresence[userId] = isOnline
-                print("👥 Presence update: \(userId) is \(isOnline ? "online" : "offline")")
-                print("👥 Current online users: \(userPresence.filter { $0.value }.map { $0.key })")
+                // Don't update our own presence
+                if userId != self.userId {
+                    userPresence[userId] = isOnline
+                    print("👥 Presence update received: \(userId) is now \(isOnline ? "ONLINE ✅" : "OFFLINE ⭕")")
+                    print("👥 All online users: \(userPresence.filter { $0.value }.keys.joined(separator: ", "))")
+                } else {
+                    print("👥 Ignoring own presence update for \(userId)")
+                }
             }
         } else if let type = json["type"] as? String, type == "typing",
                   let typingData = json["data"] as? [String: Any],
@@ -487,10 +493,12 @@ class WebSocketService: ObservableObject {
         
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
-            print("📡 Sending presence update: isOnline=\(isOnline)")
+            print("📡 Sending presence update: userId=\(uid), isOnline=\(isOnline)")
             webSocketTask?.send(.string(json)) { error in
                 if let error = error { 
                     print("❌ Presence send error: \(error.localizedDescription)")
+                } else {
+                    print("✅ Presence sent successfully: userId=\(uid), isOnline=\(isOnline)")
                 }
             }
         }
@@ -532,6 +540,10 @@ class WebSocketService: ObservableObject {
                     print("❌ Heartbeat error: \(error.localizedDescription)")
                 } else {
                     print("💓 Heartbeat sent")
+                    // Also send presence with heartbeat to ensure online status is maintained
+                    Task { @MainActor [weak self] in
+                        self?.sendPresence(isOnline: true)
+                    }
                 }
             }
         }

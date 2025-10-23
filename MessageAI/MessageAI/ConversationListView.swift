@@ -203,9 +203,8 @@ struct ConversationRow: View {
     private var isOnline: Bool {
         if let id = recipientId {
             let online = webSocketService.userPresence[id] ?? false
-            if online {
-                print("🟢 User \(displayName) is online (id: \(id))")
-            }
+            print("🔍 Checking online status for \(displayName) (id: \(id)): \(online ? "ONLINE" : "OFFLINE")")
+            print("   All online users: \(webSocketService.userPresence.filter { $0.value }.map { $0.key })")
             return online
         }
         return false

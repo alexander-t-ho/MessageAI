@@ -94,6 +94,49 @@ struct ChatView: View {
                             )
                             .id(message.id)
                         }
+                        
+                        // Typing indicator as a message bubble (left side)
+                        if let typingUser = webSocketService.typingUsers[conversation.id] {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.6))
+                                            .frame(width: 8, height: 8)
+                                            .scaleEffect(1.2)
+                                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: typingUser)
+                                        
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.6))
+                                            .frame(width: 8, height: 8)
+                                            .scaleEffect(1.2)
+                                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.2), value: typingUser)
+                                        
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.6))
+                                            .frame(width: 8, height: 8)
+                                            .scaleEffect(1.2)
+                                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.4), value: typingUser)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .background(Color(.systemGray5))
+                                    .cornerRadius(20)
+                                }
+                                .padding(.leading, 0)
+                                
+                                Spacer()
+                            }
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.8).combined(with: .opacity),
+                                removal: .scale(scale: 0.8).combined(with: .opacity)
+                            ))
+                            .animation(.easeInOut(duration: 0.2), value: webSocketService.typingUsers.count)
+                            .onAppear {
+                                print("🎯 Typing bubble visible for: \(typingUser)")
+                            }
+                        }
+                        
                         // Sentinel to detect when user is at bottom
                         Color.clear
                             .frame(height: 1)
@@ -189,25 +232,6 @@ struct ChatView: View {
                 )
             }
             
-            // Typing indicator - shows above input bar
-            if let typingUser = webSocketService.typingUsers[conversation.id] {
-                HStack(spacing: 4) {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
-                    Text("\(typingUser) is typing...")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                        .italic()
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray6))
-                .onAppear {
-                    print("🎯 Typing indicator visible for: \(typingUser)")
-                }
-            }
             
             // Input bar
             HStack(spacing: 12) {
