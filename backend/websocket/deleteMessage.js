@@ -1,77 +1,109 @@
 /**
  * WebSocket Delete Message Handler
- * Marks a message as deleted and notifies recipient to hide it locally
+ * Updates message as deleted in DynamoDB and notifies the recipient
  */
 
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, UpdateCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
-const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
-const MESSAGES_TABLE = process.env.MESSAGES_TABLE || 'Messages_AlexHo';
-const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
+const MESSAGES_TABLE = process.env.MESSAGES_TABLE || "Messages_AlexHo";
+const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || "Connections_AlexHo";
 
 export const handler = async (event) => {
-  console.log('WebSocket DeleteMessage Event:', JSON.stringify(event, null, 2));
-  const domain = event.requestContext.domainName;
-  const stage = event.requestContext.stage;
-  
+  console.log("Delete Message Event:", JSON.stringify(event, null, 2));
+  const domain = event.requestContext?.domainName;
+  const stage = event.requestContext?.stage;
+  const connectionId = event.requestContext?.connectionId;
+
   let body;
-  try {
-    body = JSON.parse(event.body);
-  } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid format' }) };
+  try { 
+    body = JSON.parse(event.body || "{}"); 
+  } catch (e) { 
+    console.error('Bad JSON body', e); 
+    return { statusCode: 400, body: JSON.stringify({ error: "Invalid body" }) };
   }
+  
   const { messageId, conversationId, senderId, recipientId } = body;
+  
   if (!messageId || !conversationId || !senderId || !recipientId) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing fields' }) };
+    return { 
+      statusCode: 400, 
+      body: JSON.stringify({ error: "messageId, conversationId, senderId, and recipientId required" }) 
+    };
   }
+  
   try {
-    // Mark as deleted (soft delete)
+    // Update message as deleted in DynamoDB
     await docClient.send(new UpdateCommand({
       TableName: MESSAGES_TABLE,
       Key: { messageId },
-      UpdateExpression: 'SET isDeleted = :true',
-      ExpressionAttributeValues: { ':true': true }
+      UpdateExpression: "SET #del = :true, #cont = :deletedText, deletedAt = :now, deletedBy = :sender",
+      ExpressionAttributeNames: {
+        "#del": "isDeleted",
+        "#cont": "content"
+      },
+      ExpressionAttributeValues: {
+        ":true": true,
+        ":deletedText": "This message was deleted",
+        ":now": new Date().toISOString(),
+        ":sender": senderId
+      }
     }));
     
-    // Notify recipient
+    console.log(`Message ${messageId} marked as deleted`);
+    
+    // Find recipient's connections
     const recipientConnections = await docClient.send(new QueryCommand({
       TableName: CONNECTIONS_TABLE,
-      IndexName: 'userId-index',
-      KeyConditionExpression: 'userId = :u',
-      ExpressionAttributeValues: { ':u': recipientId }
+      IndexName: "userId-index",
+      KeyConditionExpression: "userId = :u",
+      ExpressionAttributeValues: { ":u": recipientId }
     }));
-    const apiGateway = new ApiGatewayManagementApiClient({
-      region: process.env.AWS_REGION || 'us-east-1',
+    
+    console.log(`Found ${recipientConnections.Items?.length || 0} connections for recipient ${recipientId}`);
+    
+    // Notify recipient's connections
+    const api = new ApiGatewayManagementApiClient({
+      region: process.env.AWS_REGION || "us-east-1",
       endpoint: `https://${domain}/${stage}`
     });
-    const notify = recipientConnections.Items?.map(async (c) => {
+    
+    const deleteData = JSON.stringify({
+      type: "messageDeleted",
+      data: {
+        messageId,
+        conversationId
+      }
+    });
+    
+    const postCalls = (recipientConnections.Items || []).map(async (conn) => {
+      // Don't send to the sender's connection
+      if (conn.connectionId === connectionId) return;
+      
       try {
-        await apiGateway.send(new PostToConnectionCommand({
-          ConnectionId: c.connectionId,
-          Data: Buffer.from(JSON.stringify({
-            type: 'messageDeleted',
-            data: { messageId, conversationId }
-          }))
+        await api.send(new PostToConnectionCommand({
+          ConnectionId: conn.connectionId,
+          Data: Buffer.from(deleteData)
         }));
-      } catch (error) {
-        if (error.statusCode === 410) {
-          await docClient.send(new DeleteCommand({ TableName: CONNECTIONS_TABLE, Key: { connectionId: c.connectionId } }));
+        console.log(`✅ Sent delete notification to connection ${conn.connectionId}`);
+      } catch (sendErr) {
+        if (sendErr.statusCode === 410) {
+          console.log(`Stale connection ${conn.connectionId}, skipping`);
         } else {
-          console.error('Notify error:', error);
+          console.error(`Failed to send delete to ${conn.connectionId}:`, sendErr);
         }
       }
-    }) || [];
-    await Promise.all(notify);
+    });
+    
+    await Promise.all(postCalls);
     
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (e) {
-    console.error('Delete error:', e);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to delete' }) };
+    console.error('Delete handler error:', e);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to process delete' }) };
   }
 };
-
-

@@ -62,7 +62,7 @@ struct ChatView: View {
     // Computed messages from query (for reference)
     private var queriedMessages: [MessageData] {
         allMessages
-            .filter { $0.conversationId == conversation.id && !$0.isDeleted }
+            .filter { $0.conversationId == conversation.id }
             .sorted { $0.timestamp < $1.timestamp }
     }
     
@@ -558,15 +558,15 @@ struct ChatView: View {
         print("   Already deleted: \(message.isDeleted)")
         print("   Current visible messages: \(visibleMessages.count)")
         
-        // IMMEDIATELY remove from UI (before database operation)
-        withAnimation {
-            visibleMessages.removeAll { $0.id == message.id }
-        }
-        print("   ✅ Removed from UI immediately - now showing \(visibleMessages.count) messages")
-        
         // If message is still sending, delete completely from database
         if message.status == "sending" {
             print("   → Deleting completely from database (sending status)")
+            
+            // Remove from UI immediately for unsent messages
+            withAnimation {
+                visibleMessages.removeAll { $0.id == message.id }
+            }
+            
             modelContext.delete(message)
             
             do {
@@ -578,19 +578,27 @@ struct ChatView: View {
                 visibleMessages = queriedMessages
             }
         } else {
-            // For sent/delivered/read messages: Keep in database but hide from both users
-            print("   → Marking as deleted in database (soft delete)")
+            // For sent/delivered/read messages: Mark as deleted but keep in view
+            print("   → Marking as deleted (soft delete)")
             
-            // Mark as deleted - message stays in database but won't be displayed
+            // Update message to show as deleted
             message.isDeleted = true
+            message.content = "This message was deleted"
+            
+            // Update in visible messages
+            if let index = visibleMessages.firstIndex(where: { $0.id == message.id }) {
+                visibleMessages[index].isDeleted = true
+                visibleMessages[index].content = "This message was deleted"
+            }
             
             do {
                 try modelContext.save()
-                print("   ✅ Message marked as deleted in database (isDeleted = true)")
+                print("   ✅ Message marked as deleted in database")
+                
+                // Trigger UI refresh
+                refreshTick += 1
             } catch {
                 print("   ❌ Error marking message as deleted: \(error)")
-                // Rollback UI change if database fails
-                visibleMessages = queriedMessages
             }
         }
         
@@ -695,18 +703,28 @@ struct ChatView: View {
         // Only handle deletes for this conversation
         guard payload.conversationId == conversation.id else { return }
         
-        // Update DB and UI
+        print("🗑️ Received delete notification for message: \(payload.messageId)")
+        
+        // Update DB to mark as deleted
         do {
             let fetch = FetchDescriptor<MessageData>()
             if let msg = try modelContext.fetch(fetch).first(where: { $0.id == payload.messageId }) {
                 msg.isDeleted = true
+                msg.content = "This message was deleted" // Update content for deleted messages
                 try modelContext.save()
+                print("   ✅ Message marked as deleted in database")
+                
+                // Update in visible messages (don't remove, just mark as deleted)
+                if let index = visibleMessages.firstIndex(where: { $0.id == payload.messageId }) {
+                    visibleMessages[index].isDeleted = true
+                    visibleMessages[index].content = "This message was deleted"
+                }
+                
+                // Trigger UI refresh
+                refreshTick += 1
             }
         } catch {
             print("❌ Error applying delete: \(error)")
-        }
-        withAnimation {
-            visibleMessages.removeAll { $0.id == payload.messageId }
         }
     }
     
@@ -945,7 +963,18 @@ struct MessageBubble: View {
                 }
                 
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                // Reply context (if this message is a reply)
+                // Show deleted message differently
+                if message.isDeleted {
+                    Text("This message was deleted")
+                        .font(.system(size: 15))
+                        .italic()
+                        .foregroundColor(.gray.opacity(0.8))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(20)
+                } else {
+                    // Reply context (if this message is a reply)
                     if let replyToContent = message.replyToContent,
                        let replyToSenderName = message.replyToSenderName,
                        let replyToId = message.replyToMessageId {
@@ -1025,6 +1054,7 @@ struct MessageBubble: View {
                     .foregroundColor(.gray)
                     .padding(.top, 2)
                 }
+                } // End of else (non-deleted message)
             }
             .offset(x: swipeOffset)
             // force view refresh when status updates tick changes so latest read attaches correctly
