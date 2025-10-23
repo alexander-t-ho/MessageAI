@@ -1771,7 +1771,7 @@ struct EditMessageView: View {
         NavigationView {
             VStack(spacing: 0) {
                 // Edit area
-                TextEditor(editText)
+                TextEditor(text: $editText)
                     .padding()
                     .frame(minHeight: 100, maxHeight: 200)
                     .background(Color(.systemGray6))
