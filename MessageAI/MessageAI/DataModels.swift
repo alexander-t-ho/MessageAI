@@ -23,6 +23,11 @@ final class MessageData {
     // NOTE: isSentByCurrentUser is NO LONGER stored - it's computed on the fly!
     // This is because the SAME message should appear differently for sender vs receiver
     
+    // Group chat read receipts - track who has read the message
+    var readByUserIds: [String] // User IDs who have read this message
+    var readByUserNames: [String] // Names of users who have read this message
+    var readTimestamps: [String: Date] // Map of userId to read timestamp
+    
     // Reply feature
     var replyToMessageId: String? // ID of message being replied to
     var replyToContent: String? // Preview of message being replied to
@@ -45,6 +50,9 @@ final class MessageData {
         status: String = "sending",
         isRead: Bool = false,
         readAt: Date? = nil,
+        readByUserIds: [String] = [],
+        readByUserNames: [String] = [],
+        readTimestamps: [String: Date] = [:],
         replyToMessageId: String? = nil,
         replyToContent: String? = nil,
         replyToSenderName: String? = nil,
@@ -61,6 +69,9 @@ final class MessageData {
         self.status = status
         self.isRead = isRead
         self.readAt = readAt
+        self.readByUserIds = readByUserIds
+        self.readByUserNames = readByUserNames
+        self.readTimestamps = readTimestamps
         // No longer setting isSentByCurrentUser here!
         self.replyToMessageId = replyToMessageId
         self.replyToContent = replyToContent
@@ -88,6 +99,14 @@ final class ConversationData {
     var lastMessageTime: Date?
     var unreadCount: Int
     
+    // Group-specific fields
+    var createdBy: String? // User ID who created the group
+    var createdByName: String? // Name of user who created the group
+    var createdAt: Date? // When the group was created
+    var groupAdmins: [String] // User IDs who can manage the group
+    var lastUpdatedBy: String? // User ID who last updated group info
+    var lastUpdatedAt: Date? // When the group info was last updated
+    
     init(
         id: String = UUID().uuidString,
         participantIds: [String],
@@ -96,7 +115,13 @@ final class ConversationData {
         groupName: String? = nil,
         lastMessage: String? = nil,
         lastMessageTime: Date? = nil,
-        unreadCount: Int = 0
+        unreadCount: Int = 0,
+        createdBy: String? = nil,
+        createdByName: String? = nil,
+        createdAt: Date? = nil,
+        groupAdmins: [String] = [],
+        lastUpdatedBy: String? = nil,
+        lastUpdatedAt: Date? = nil
     ) {
         self.id = id
         self.participantIds = participantIds
@@ -106,6 +131,12 @@ final class ConversationData {
         self.lastMessage = lastMessage
         self.lastMessageTime = lastMessageTime
         self.unreadCount = unreadCount
+        self.createdBy = createdBy
+        self.createdByName = createdByName
+        self.createdAt = createdAt
+        self.groupAdmins = groupAdmins
+        self.lastUpdatedBy = lastUpdatedBy
+        self.lastUpdatedAt = lastUpdatedAt
     }
 }
 

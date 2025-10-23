@@ -12,6 +12,7 @@ struct ConversationListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ConversationData.lastMessageTime, order: .reverse) private var conversations: [ConversationData]
     @State private var showNewChat = false
+    @State private var showingNewGroup = false
     @State private var selectedConversation: ConversationData?
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -108,7 +109,12 @@ struct ConversationListView: View {
                 }
             }
             .sheet(isPresented: $showNewChat) {
-                NewConversationView()
+                NewConversationView(showingNewGroup: $showingNewGroup)
+            }
+            .sheet(isPresented: $showingNewGroup) {
+                NewGroupChatView()
+                    .environmentObject(authViewModel)
+                    .environmentObject(webSocketService)
             }
             .onChange(of: webSocketService.receivedMessages.count) { oldValue, newValue in
                 guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
@@ -392,11 +398,15 @@ struct NewConversationView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var webSocketService: WebSocketService
+    
+    @Binding var showingNewGroup: Bool
     
     @State private var searchQuery = ""
     @State private var searchResults: [UserSearchResult] = []
     @State private var isSearching = false
     @State private var selectedUser: UserSearchResult?
+    @State private var selectedTab = 0 // 0 for Direct Message, 1 for Group Chat
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -405,107 +415,160 @@ struct NewConversationView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Search bar
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                    
-                    TextField("Search by name or email", text: $searchQuery)
-                        .autocapitalization(.none)
-                        .textContentType(.name)
-                        .onChange(of: searchQuery) { oldValue, newValue in
-                            Task {
-                                await performSearch(query: newValue)
-                            }
-                        }
-                    
-                    if isSearching {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .scaleEffect(0.8)
-                    }
-                    
-                    if !searchQuery.isEmpty {
-                        Button(action: { searchQuery = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
-                        }
-                    }
+                // Tab picker for Direct Message vs Group
+                Picker("", selection: $selectedTab) {
+                    Text("Direct Message").tag(0)
+                    Text("Group Chat").tag(1)
                 }
+                .pickerStyle(SegmentedPickerStyle())
                 .padding()
-                .background(Color(.systemGray6))
                 
-                // Search results or empty state
-                if searchQuery.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .padding(.top, 80)
-                        
-                        Text("Search for People")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        
-                        Text("Enter a name or email to find users")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                } else if searchResults.isEmpty && !isSearching {
-                    VStack(spacing: 20) {
-                        Image(systemName: "person.fill.questionmark")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .padding(.top, 80)
-                        
-                        Text("No Users Found")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        
-                        Text("Try a different name or email")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                } else {
-                    List(searchResults) { user in
-                        Button(action: {
-                            createConversation(with: user)
-                        }) {
-                            HStack(spacing: 12) {
-                                // Avatar
-                                Circle()
-                                    .fill(avatarColor(for: user.name))
-                                    .frame(width: 50, height: 50)
-                                    .overlay(
-                                        Text(user.name.prefix(1).uppercased())
-                                            .font(.title3)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                    )
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(user.name)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    
-                                    Text(user.email)
-                                        .font(.subheadline)
+                if selectedTab == 0 {
+                    // Direct Message UI (existing)
+                    VStack(spacing: 0) {
+                        // Search bar
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            
+                            TextField("Search by name or email", text: $searchQuery)
+                                .autocapitalization(.none)
+                                .textContentType(.name)
+                                .onChange(of: searchQuery) { oldValue, newValue in
+                                    Task {
+                                        await performSearch(query: newValue)
+                                    }
+                                }
+                            
+                            if isSearching {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .scaleEffect(0.8)
+                            }
+                            
+                            if !searchQuery.isEmpty {
+                                Button(action: { searchQuery = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
                                         .foregroundColor(.gray)
                                 }
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        
+                        // Search results or empty state
+                        if searchQuery.isEmpty {
+                            VStack(spacing: 20) {
+                                Image(systemName: "person.2.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.gray.opacity(0.5))
+                                    .padding(.top, 80)
                                 
-                                Spacer()
+                                Text("Search for People")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
                                 
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
+                                Text("Enter a name or email to find users")
+                                    .font(.subheadline)
                                     .foregroundColor(.gray)
                             }
-                            .padding(.vertical, 8)
+                        } else if searchResults.isEmpty && !isSearching {
+                            VStack(spacing: 20) {
+                                Image(systemName: "person.fill.questionmark")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.gray.opacity(0.5))
+                                    .padding(.top, 80)
+                                
+                                Text("No Users Found")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                
+                                Text("Try a different name or email")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            }
+                        } else {
+                            List(searchResults) { user in
+                                Button(action: {
+                                    createConversation(with: user)
+                                }) {
+                                    HStack(spacing: 12) {
+                                        // Avatar
+                                        Circle()
+                                            .fill(avatarColor(for: user.name))
+                                            .frame(width: 50, height: 50)
+                                            .overlay(
+                                                Text(user.name.prefix(1).uppercased())
+                                                    .font(.title3)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                            )
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(user.name)
+                                                .font(.headline)
+                                                .foregroundColor(.primary)
+                                            
+                                            Text(user.email)
+                                                .font(.subheadline)
+                                                .foregroundColor(.gray)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                            }
+                            .listStyle(.plain)
                         }
+                        
+                        Spacer()
+                    } // End of Direct Message VStack
+                } else {
+                    // Group Chat UI
+                    VStack {
+                        Spacer()
+                        
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.blue)
+                            .padding()
+                        
+                        Text("Create a Group Chat")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Start conversations with multiple people")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Button(action: {
+                            dismiss()
+                            // Delay to allow dismiss animation to complete
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                showingNewGroup = true
+                            }
+                        }) {
+                            Text("Create Group")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .cornerRadius(10)
+                        }
+                        .padding(.horizontal, 40)
+                        .padding(.top, 30)
+                        
+                        Spacer()
                     }
-                    .listStyle(.plain)
-                }
-                
-                Spacer()
+                } // End of tab conditional
             }
             .navigationTitle("New Conversation")
             .navigationBarTitleDisplayMode(.inline)

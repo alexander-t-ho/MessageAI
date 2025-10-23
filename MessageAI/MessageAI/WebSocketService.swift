@@ -238,6 +238,120 @@ class WebSocketService: ObservableObject {
         }
     }
     
+    // MARK: - Group Chat Methods
+    
+    /// Send group created notification
+    func sendGroupCreated(
+        conversationId: String,
+        groupName: String,
+        participantIds: [String],
+        participantNames: [String],
+        createdBy: String,
+        createdByName: String
+    ) {
+        guard connectionState == .connected else { return }
+        
+        let payload: [String: Any] = [
+            "action": "groupCreated",
+            "conversationId": conversationId,
+            "groupName": groupName,
+            "participantIds": participantIds,
+            "participantNames": participantNames,
+            "createdBy": createdBy,
+            "createdByName": createdByName,
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        sendWebSocketPayload(payload)
+    }
+    
+    /// Send group update notification
+    func sendGroupUpdate(
+        conversationId: String,
+        groupName: String,
+        updatedBy: String,
+        updatedByName: String,
+        participantIds: [String]
+    ) {
+        guard connectionState == .connected else { return }
+        
+        let payload: [String: Any] = [
+            "action": "groupUpdate",
+            "conversationId": conversationId,
+            "groupName": groupName,
+            "updatedBy": updatedBy,
+            "updatedByName": updatedByName,
+            "participantIds": participantIds,
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        sendWebSocketPayload(payload)
+    }
+    
+    /// Send group members added notification
+    func sendGroupMembersAdded(
+        conversationId: String,
+        newMemberIds: [String],
+        newMemberNames: [String],
+        addedBy: String,
+        addedByName: String,
+        allMemberIds: [String]
+    ) {
+        guard connectionState == .connected else { return }
+        
+        let payload: [String: Any] = [
+            "action": "groupMembersAdded",
+            "conversationId": conversationId,
+            "newMemberIds": newMemberIds,
+            "newMemberNames": newMemberNames,
+            "addedBy": addedBy,
+            "addedByName": addedByName,
+            "allMemberIds": allMemberIds,
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        sendWebSocketPayload(payload)
+    }
+    
+    /// Send group member left notification
+    func sendGroupMemberLeft(
+        conversationId: String,
+        userId: String,
+        userName: String,
+        remainingMemberIds: [String]
+    ) {
+        guard connectionState == .connected else { return }
+        
+        let payload: [String: Any] = [
+            "action": "groupMemberLeft",
+            "conversationId": conversationId,
+            "userId": userId,
+            "userName": userName,
+            "remainingMemberIds": remainingMemberIds,
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        sendWebSocketPayload(payload)
+    }
+    
+    /// Helper method to send WebSocket payload
+    private func sendWebSocketPayload(_ payload: [String: Any]) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            guard let json = String(data: data, encoding: .utf8) else { return }
+            let message = URLSessionWebSocketTask.Message.string(json)
+            webSocketTask?.send(message) { error in
+                if let error = error {
+                    print("❌ Error sending payload: \(error.localizedDescription)")
+                } else {
+                    print("✅ Payload sent successfully")
+                }
+            }
+        } catch {
+            print("❌ Error serializing payload: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Private Methods
     
     /// Perform the actual WebSocket connection
