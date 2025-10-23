@@ -317,7 +317,6 @@ struct ChatView: View {
             // Clean up typing indicator when leaving chat
             sendTypingIndicator(isTyping: false)
         }
-        }  // End of else block for deleted conversation check
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -388,6 +387,7 @@ struct ChatView: View {
                 scrollToBottomTick += 1
             }
         }
+        }  // End of else block for deleted conversation check
     }
     
     // MARK: - Helper Methods
