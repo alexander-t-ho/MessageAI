@@ -100,42 +100,50 @@ struct ChatView: View {
                         // Typing indicator as a message bubble (left side)
                         if let typingUser = webSocketService.typingUsers[conversation.id] {
                             HStack(alignment: .bottom, spacing: 8) {
-                                // Bubble with animated dots
+                                // Bubble with animated dots - more visible
                                 ZStack {
-                                    // Background bubble
-                                    RoundedRectangle(cornerRadius: 22)
+                                    // Background bubble with better visibility
+                                    RoundedRectangle(cornerRadius: 20)
                                         .fill(Color(.systemGray5))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 22)
-                                                .stroke(Color(.systemGray4), lineWidth: 0.5)
-                                        )
-                                        .frame(width: 70, height: 40)
+                                        .frame(width: 80, height: 44)
+                                        .shadow(color: .gray.opacity(0.2), radius: 2, x: 0, y: 1)
                                     
-                                    // Animated dots
-                                    HStack(spacing: 4) {
-                                        TypingDot(delay: 0.0)
-                                        TypingDot(delay: 0.2)
-                                        TypingDot(delay: 0.4)
+                                    // Animated dots - larger and more visible
+                                    HStack(spacing: 5) {
+                                        ForEach(0..<3) { index in
+                                            Circle()
+                                                .fill(Color.gray)
+                                                .frame(width: 12, height: 12)
+                                                .scaleEffect(typingDotsAnimation ? 1.2 : 0.8)
+                                                .animation(
+                                                    Animation.easeInOut(duration: 0.6)
+                                                        .repeatForever()
+                                                        .delay(Double(index) * 0.15),
+                                                    value: typingDotsAnimation
+                                                )
+                                        }
                                     }
                                 }
                                 
                                 Spacer()
                             }
                             .padding(.leading, 12)
+                            .padding(.vertical, 4)
+                            .id("typing-indicator")
                             .transition(.asymmetric(
-                                insertion: .scale(scale: 0.5, anchor: .bottomLeading)
-                                    .combined(with: .opacity),
-                                removal: .scale(scale: 0.5, anchor: .bottomLeading)
-                                    .combined(with: .opacity)
+                                insertion: .move(edge: .bottom).combined(with: .opacity),
+                                removal: .move(edge: .bottom).combined(with: .opacity)
                             ))
-                            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: webSocketService.typingUsers[conversation.id] != nil)
-                            .id("typing-\(typingUser)")
                             .onAppear {
                                 print("🎯 Typing bubble visible for: \(typingUser)")
-                                typingDotsAnimation = true
-                                // Auto-scroll to bottom when typing appears
-                                if !userHasManuallyScrolledUp {
-                                    scrollToBottomTick += 1
+                                withAnimation {
+                                    typingDotsAnimation = true
+                                }
+                                // Auto-scroll to bottom when typing appears with delay
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    if !userHasManuallyScrolledUp {
+                                        scrollToBottomTick += 1
+                                    }
                                 }
                             }
                             .onDisappear {
@@ -187,10 +195,17 @@ struct ChatView: View {
                     markVisibleIncomingAsRead()
                 }
                 .onChange(of: scrollToBottomTick) { _, _ in
-                    if let lastMessage = visibleMessages.last {
-                        withAnimation { proxy.scrollTo(lastMessage.id, anchor: .bottom) }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { isAtBottom = true }
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        if webSocketService.typingUsers[conversation.id] != nil {
+                            // If typing, scroll to the typing indicator
+                            proxy.scrollTo("typing-indicator", anchor: .bottom)
+                        } else if let lastMessage = visibleMessages.last {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        } else {
+                            proxy.scrollTo("bottom-sentinel", anchor: .bottom)
+                        }
                     }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { isAtBottom = true }
                 }
                 .onAppear {
                     print("👁️ ChatView appeared - loading messages")
@@ -379,9 +394,13 @@ struct ChatView: View {
         }
         .onChange(of: webSocketService.typingUsers[conversation.id]) { oldValue, newValue in
             // Auto-scroll to bottom when someone starts typing
-            if newValue != nil && oldValue == nil && !userHasManuallyScrolledUp {
+            if newValue != nil && oldValue == nil {
                 print("🔽 Auto-scrolling to show typing indicator")
-                scrollToBottomTick += 1
+                // Always scroll to bottom for typing indicator visibility
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    scrollToBottomTick += 1
+                    userHasManuallyScrolledUp = false
+                }
             }
         }
     }
@@ -844,15 +863,15 @@ struct ChatView: View {
             // Cancel existing timer
             typingTimer?.invalidate()
             
-            // Send typing indicator immediately on every character change for responsiveness
+            // Send typing indicator at reasonable intervals to reduce jitter
             let now = Date()
-            if now.timeIntervalSince(lastTypingTime) > 0.5 { // Send every 0.5 seconds for live feel
+            if now.timeIntervalSince(lastTypingTime) > 1.0 { // Send every 1 second to reduce network traffic
                 sendTypingIndicator(isTyping: true)
                 lastTypingTime = now
             }
             
-            // Set timer to stop typing after 1.5 seconds of inactivity (faster stop detection)
-            typingTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
+            // Set timer to stop typing after 2 seconds of inactivity
+            typingTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
                 Task { @MainActor in
                     sendTypingIndicator(isTyping: false)
                 }
@@ -987,8 +1006,9 @@ struct MessageBubble: View {
                             .foregroundColor(.gray)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 10)
-                            .background(Color(.systemGray6).opacity(0.8))
+                            .background(Color(.systemGray6))
                             .cornerRadius(18)
+                            .opacity(0.5) // 50% opacity for the entire deleted message
                         Spacer()
                     }
                 } else {
@@ -1228,27 +1248,7 @@ struct MessageBubble: View {
 
 // MARK: - Typing Dot Animation
 
-struct TypingDot: View {
-    let delay: Double
-    @State private var isAnimating = false
-    
-    var body: some View {
-        Circle()
-            .fill(Color.gray)
-            .frame(width: 10, height: 10)
-            .scaleEffect(isAnimating ? 1.0 : 0.5)
-            .opacity(isAnimating ? 1.0 : 0.4)
-            .animation(
-                Animation.easeInOut(duration: 0.6)
-                    .repeatForever(autoreverses: true)
-                    .delay(delay),
-                value: isAnimating
-            )
-            .onAppear {
-                isAnimating = true
-            }
-    }
-}
+// Removed TypingDot struct - using simplified inline animation instead
 
 // MARK: - Reply Banner (Very Compact)
 
