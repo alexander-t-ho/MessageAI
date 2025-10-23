@@ -159,7 +159,7 @@ struct NewGroupChatView: View {
         
         // Add current user to participants
         participantIds.append(currentUser.id)
-        participantNames.append(currentUser.displayName)
+        participantNames.append(currentUser.name)
         
         // Create conversation ID (deterministic for group)
         let conversationId = UUID().uuidString
@@ -180,7 +180,7 @@ struct NewGroupChatView: View {
             lastMessageTime: Date(),
             unreadCount: 0,
             createdBy: currentUser.id,
-            createdByName: currentUser.displayName,
+            createdByName: currentUser.name,
             createdAt: Date(),
             groupAdmins: [currentUser.id] // Creator is admin by default
         )
@@ -198,7 +198,7 @@ struct NewGroupChatView: View {
                 participantIds: participantIds,
                 participantNames: participantNames,
                 createdBy: currentUser.id,
-                createdByName: currentUser.displayName
+                createdByName: currentUser.name
             )
             
             isCreatingGroup = false

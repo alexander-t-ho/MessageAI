@@ -180,7 +180,7 @@ struct GroupDetailsView: View {
                 conversationId: conversation.id,
                 groupName: newGroupName,
                 updatedBy: authViewModel.currentUser?.id ?? "",
-                updatedByName: authViewModel.currentUser?.displayName ?? "Unknown",
+                updatedByName: authViewModel.currentUser?.name ?? "Unknown",
                 participantIds: conversation.participantIds
             )
             
@@ -196,7 +196,7 @@ struct GroupDetailsView: View {
         
         // Remove current user from participants
         conversation.participantIds.removeAll { $0 == currentUserId }
-        conversation.participantNames.removeAll { $0 == authViewModel.currentUser?.displayName }
+        conversation.participantNames.removeAll { $0 == authViewModel.currentUser?.name }
         
         // If user was admin, remove from admins
         conversation.groupAdmins.removeAll { $0 == currentUserId }
@@ -208,7 +208,7 @@ struct GroupDetailsView: View {
             webSocketService.sendGroupMemberLeft(
                 conversationId: conversation.id,
                 userId: currentUserId,
-                userName: authViewModel.currentUser?.displayName ?? "Unknown",
+                userName: authViewModel.currentUser?.name ?? "Unknown",
                 remainingMemberIds: conversation.participantIds
             )
             
@@ -400,7 +400,7 @@ struct AddMembersView: View {
                 newMemberIds: newUserIds,
                 newMemberNames: newUserNames,
                 addedBy: authViewModel.currentUser?.id ?? "",
-                addedByName: authViewModel.currentUser?.displayName ?? "Unknown",
+                addedByName: authViewModel.currentUser?.name ?? "Unknown",
                 allMemberIds: conversation.participantIds
             )
             
