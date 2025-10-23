@@ -458,19 +458,47 @@ struct ChatView: View {
     }
     
     private var isPeerOnline: Bool {
-        // Read peer presence from WebSocketService cache
-        webSocketService.userPresence[recipientId] ?? false
+        if conversation.isGroupChat {
+            // For group chats, check if ANY member (except current user) is online
+            return conversation.participantIds
+                .filter { $0 != currentUserId }
+                .contains { webSocketService.userPresence[$0] ?? false }
+        } else {
+            // For direct messages, check the single recipient
+            return webSocketService.userPresence[recipientId] ?? false
+        }
+    }
+    
+    private var onlineMemberCount: Int {
+        guard conversation.isGroupChat else { return isPeerOnline ? 1 : 0 }
+        return conversation.participantIds
+            .filter { $0 != currentUserId }
+            .filter { webSocketService.userPresence[$0] ?? false }
+            .count
     }
     
     @ViewBuilder private var presenceDot: some View {
-        Circle()
-            .fill(isPeerOnline ? Color.green : Color.clear)
-            .overlay(
-                Circle()
-                    .stroke(Color.gray.opacity(0.6), lineWidth: 1)
-            )
-            .frame(width: 10, height: 10)
-            .accessibilityLabel(isPeerOnline ? "Active" : "Offline")
+        if conversation.isGroupChat {
+            // For group chats, show green if anyone is online, gray otherwise
+            Circle()
+                .fill(isPeerOnline ? Color.green : Color.clear)
+                .overlay(
+                    Circle()
+                        .stroke(Color.gray.opacity(0.6), lineWidth: 1)
+                )
+                .frame(width: 10, height: 10)
+                .accessibilityLabel(isPeerOnline ? "\(onlineMemberCount) member\(onlineMemberCount == 1 ? "" : "s") active" : "All offline")
+        } else {
+            // For direct messages, simple online/offline indicator
+            Circle()
+                .fill(isPeerOnline ? Color.green : Color.clear)
+                .overlay(
+                    Circle()
+                        .stroke(Color.gray.opacity(0.6), lineWidth: 1)
+                )
+                .frame(width: 10, height: 10)
+                .accessibilityLabel(isPeerOnline ? "Active" : "Offline")
+        }
     }
     
     private func loadDraft() {
