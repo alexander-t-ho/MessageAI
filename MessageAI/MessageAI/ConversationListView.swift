@@ -60,6 +60,7 @@ struct ConversationListView: View {
                             NavigationLink(value: conversation) {
                                 ConversationRow(conversation: conversation)
                             }
+                            .id(conversation.id) // Force refresh on deletion
                         }
                         .onDelete(perform: deleteConversations)
                     }
@@ -68,7 +69,12 @@ struct ConversationListView: View {
             }
             .navigationTitle("Messages")
             .navigationDestination(for: ConversationData.self) { convo in
-                ChatView(conversation: convo)
+                // Ensure conversation still exists before navigating
+                if conversations.contains(where: { $0.id == convo.id }) {
+                    ChatView(conversation: convo)
+                } else {
+                    EmptyView()
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -121,10 +127,10 @@ struct ConversationListView: View {
     }
     
     private func deleteConversations(at offsets: IndexSet) {
-        for index in offsets {
-            guard index < conversations.count else { continue }
-            let conversation = conversations[index]
-            
+        // Convert IndexSet to array of conversations before deletion
+        let conversationsToDelete = offsets.map { conversations[$0] }
+        
+        for conversation in conversationsToDelete {
             print("🗑️ Deleting conversation: \(conversation.id)")
             
             // Delete any draft for this conversation first

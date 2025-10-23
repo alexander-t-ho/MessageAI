@@ -133,6 +133,10 @@ struct ChatView: View {
                             .onAppear {
                                 print("🎯 Typing bubble visible for: \(typingUser)")
                                 typingDotsAnimation = true
+                                // Auto-scroll to bottom when typing appears
+                                if !userHasManuallyScrolledUp {
+                                    scrollToBottomTick += 1
+                                }
                             }
                             .onDisappear {
                                 typingDotsAnimation = false
@@ -226,11 +230,14 @@ struct ChatView: View {
                 }
             }
             // Check if conversation still exists
-            .onChange(of: allConversations.count) { _, _ in
+            .onChange(of: allConversations) { _, newConversations in
                 // If conversation is no longer in the list, dismiss the view
-                if !allConversations.contains(where: { $0.id == conversation.id }) {
+                if !newConversations.contains(where: { $0.id == conversation.id }) {
                     print("⚠️ Conversation deleted, dismissing ChatView")
-                    dismiss()
+                    // Small delay to avoid navigation conflicts
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        dismiss()
+                    }
                 }
             }
             
@@ -367,6 +374,13 @@ struct ChatView: View {
                 refreshTick += 1
                 // Keep bottom aligned for live updates unless user scrolled up
                 // Keep bottom aligned for live updates
+                scrollToBottomTick += 1
+            }
+        }
+        .onChange(of: webSocketService.typingUsers[conversation.id]) { oldValue, newValue in
+            // Auto-scroll to bottom when someone starts typing
+            if newValue != nil && oldValue == nil && !userHasManuallyScrolledUp {
+                print("🔽 Auto-scrolling to show typing indicator")
                 scrollToBottomTick += 1
             }
         }
@@ -823,22 +837,22 @@ struct ChatView: View {
         // If user just started typing (went from empty to non-empty)
         if trimmedOld.isEmpty && !trimmedNew.isEmpty {
             sendTypingIndicator(isTyping: true)
+            lastTypingTime = Date()
         }
         // If user is still typing
         else if !trimmedNew.isEmpty {
-            // Update last typing time
-            lastTypingTime = Date()
-            
             // Cancel existing timer
             typingTimer?.invalidate()
             
-            // If we haven't sent a typing indicator recently, send one
-            if Date().timeIntervalSince(lastTypingTime) > 2 {
+            // Send typing indicator immediately on every character change for responsiveness
+            let now = Date()
+            if now.timeIntervalSince(lastTypingTime) > 0.5 { // Send every 0.5 seconds for live feel
                 sendTypingIndicator(isTyping: true)
+                lastTypingTime = now
             }
             
-            // Set timer to stop typing after 3 seconds of inactivity
-            typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            // Set timer to stop typing after 1.5 seconds of inactivity (faster stop detection)
+            typingTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
                 Task { @MainActor in
                     sendTypingIndicator(isTyping: false)
                 }
@@ -962,18 +976,23 @@ struct MessageBubble: View {
                     .cornerRadius(20)
                 }
                 
-            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                // Show deleted message differently
+            VStack(alignment: .center, spacing: 4) {
+                // Show deleted message differently - centered for both users
                 if message.isDeleted {
-                    Text("This message was deleted")
-                        .font(.system(size: 15))
-                        .italic()
-                        .foregroundColor(.gray.opacity(0.8))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(20)
+                    HStack {
+                        Spacer()
+                        Text("This message was deleted")
+                            .font(.system(size: 14))
+                            .italic()
+                            .foregroundColor(.gray)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(Color(.systemGray6).opacity(0.8))
+                            .cornerRadius(18)
+                        Spacer()
+                    }
                 } else {
+                    VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
                     // Reply context (if this message is a reply)
                     if let replyToContent = message.replyToContent,
                        let replyToSenderName = message.replyToSenderName,
@@ -1054,6 +1073,7 @@ struct MessageBubble: View {
                     .foregroundColor(.gray)
                     .padding(.top, 2)
                 }
+                    } // End of VStack for non-deleted message content
                 } // End of else (non-deleted message)
             }
             .offset(x: swipeOffset)
