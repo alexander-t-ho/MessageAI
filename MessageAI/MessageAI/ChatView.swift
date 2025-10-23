@@ -1245,7 +1245,6 @@ struct MessageBubble: View {
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
-}
 
 // MARK: - Typing Dot Animation
 
