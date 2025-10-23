@@ -7,9 +7,12 @@
     "deploy": "./deploy.sh"
   },
   "dependencies": {
-    "@aws-sdk/client-apigatewaymanagementapi": "^3.0.0",
-    "@aws-sdk/client-dynamodb": "^3.0.0",
-    "@aws-sdk/lib-dynamodb": "^3.0.0"
-  }
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.916.0",
+    "@aws-sdk/client-dynamodb": "^3.916.0",
+    "@aws-sdk/lib-dynamodb": "^3.916.0"
+  },
+  "main": "catchUp.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
-

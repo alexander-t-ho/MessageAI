@@ -1179,27 +1179,49 @@ struct MessageBubble: View {
                         statusIcon
                     }
                 }
-                // Read receipt label shown only for the most recent outgoing message
+                // Read receipt with profile icons - shown only for the most recent outgoing message
                 if isFromCurrentUser, isLastOutgoingRead {
-                    HStack(spacing: 4) {
-                        // For group chats, show who has read the message
+                    HStack(spacing: 6) {
+                        // For group chats, show profile icons of who has read
                         if conversation.isGroupChat && !message.readByUserNames.isEmpty {
-                            Text("Read by \(formatReadByNames(message.readByUserNames))")
+                            Text("Read by")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                            
+                            // Show profile picture icons (up to 3)
+                            HStack(spacing: -8) {
+                                ForEach(Array(message.readByUserNames.prefix(3)), id: \.self) { userName in
+                                    // Skip current user if somehow in the list
+                                    if userName != currentUserId {
+                                        ProfileIcon(name: userName, size: 20)
+                                    }
+                                }
+                                
+                                // If more than 3 readers, show count
+                                if message.readByUserNames.count > 3 {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 20, height: 20)
+                                        Text("+\(message.readByUserNames.count - 3)")
+                                            .font(.system(size: 9, weight: .medium))
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                            }
                         } else {
                             Text("Read")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
                         }
                         
                         if let t = message.readAt {
                             Text(readTime(t))
+                                .font(.caption2)
+                                .foregroundColor(.gray)
                         }
-                        // Blue check in a circle
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.blue)
                     }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 }
                     } // End of VStack
                 } // End of ZStack
@@ -1375,6 +1397,43 @@ struct MessageBubble: View {
 // MARK: - Typing Dot Animation
 
 // Removed TypingDot struct - using simplified inline animation instead
+
+// MARK: - Profile Icon for Read Receipts
+
+struct ProfileIcon: View {
+    let name: String
+    let size: CGFloat
+    
+    private var initials: String {
+        let words = name.split(separator: " ")
+        let firstInitial = words.first?.prefix(1).uppercased() ?? ""
+        let lastInitial = words.count > 1 ? words.last?.prefix(1).uppercased() ?? "" : ""
+        return firstInitial + lastInitial
+    }
+    
+    private var backgroundColor: Color {
+        // Generate a consistent color based on the name
+        let hash = name.hashValue
+        let colors: [Color] = [.blue, .green, .purple, .orange, .pink, .red, .cyan, .indigo]
+        return colors[abs(hash) % colors.count]
+    }
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(backgroundColor.gradient)
+                .frame(width: size, height: size)
+            
+            Text(initials)
+                .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                .foregroundColor(.white)
+        }
+        .overlay(
+            Circle()
+                .stroke(Color.white, lineWidth: 1)
+        )
+    }
+}
 
 // MARK: - Reply Banner (Very Compact)
 

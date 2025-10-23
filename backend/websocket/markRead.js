@@ -46,27 +46,54 @@ export const handler = async (event) => {
     // Update messages to read
     for (const messageId of messageIds) {
       try {
+        // First get the current message to accumulate readers
+        const getMessage = await docClient.send(new GetCommand({
+          TableName: MESSAGES_TABLE,
+          Key: { messageId }
+        }));
+        
+        if (!getMessage.Item) {
+          console.warn(`Message ${messageId} not found`);
+          continue;
+        }
+        
+        const currentMessage = getMessage.Item;
+        const senderId = currentMessage.senderId;
+        
         let updateExpression;
         let expressionAttributeNames;
         let expressionAttributeValues;
         
         if (isGroupChat) {
-          // For group chats, track who has read the message
-          updateExpression = "SET #s = :read, #ra = :ra ADD #rids :rids, #rnames :rnames SET #rts.#rid = :ra";
+          // For group chats, accumulate readers in arrays
+          const currentReadByUserIds = currentMessage.readByUserIds || [];
+          const currentReadByUserNames = currentMessage.readByUserNames || [];
+          const currentReadTimestamps = currentMessage.readTimestamps || {};
+          
+          // Add current reader if not already present
+          if (!currentReadByUserIds.includes(readerId)) {
+            currentReadByUserIds.push(readerId);
+            currentReadByUserNames.push(readerName || readerId);
+          }
+          currentReadTimestamps[readerId] = readAt;
+          
+          updateExpression = "SET #s = :read, #ra = :ra, #rids = :rids, #rnames = :rnames, #rts = :rts";
           expressionAttributeNames = { 
             "#s": "status", 
             "#ra": "readAt",
             "#rids": "readByUserIds",
             "#rnames": "readByUserNames",
-            "#rts": "readTimestamps",
-            "#rid": readerId
+            "#rts": "readTimestamps"
           };
           expressionAttributeValues = { 
             ":read": "read", 
             ":ra": readAt,
-            ":rids": docClient.createSet([readerId]),
-            ":rnames": docClient.createSet([readerName || readerId])
+            ":rids": currentReadByUserIds,
+            ":rnames": currentReadByUserNames,
+            ":rts": currentReadTimestamps
           };
+          
+          console.log(`📖 Group read tracking: ${currentReadByUserNames.join(', ')}`);
         } else {
           // For direct messages, simple read status
           updateExpression = "SET #s = :read, #ra = :ra";
@@ -83,7 +110,6 @@ export const handler = async (event) => {
           ReturnValues: "ALL_NEW"
         }));
         
-        const senderId = res.Attributes && res.Attributes.senderId;
         if (senderId) {
           messageIdToSender[messageId] = {
             senderId,
@@ -94,6 +120,9 @@ export const handler = async (event) => {
         }
         
         console.log(`✅ Marked message ${messageId} as read by ${readerName || readerId}`);
+        if (isGroupChat && res.Attributes.readByUserNames) {
+          console.log(`   All readers: ${res.Attributes.readByUserNames.join(', ')}`);
+        }
       } catch (e) { 
         console.error(`❌ Update read failed for ${messageId}:`, e.message); 
       }
