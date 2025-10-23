@@ -864,6 +864,29 @@ struct ChatView: View {
                         msg.readAt = Date()
                         print("   ⚠️ No readAt timestamp in payload, using current time")
                     }
+                    
+                    // For group chats, store who has read the message
+                    if conversation.isGroupChat {
+                        if let readByUserIds = payload.readByUserIds {
+                            msg.readByUserIds = readByUserIds
+                            print("   👥 Read by user IDs: \(readByUserIds.joined(separator: ", "))")
+                        }
+                        if let readByUserNames = payload.readByUserNames {
+                            msg.readByUserNames = readByUserNames
+                            print("   👥 Read by: \(readByUserNames.joined(separator: ", "))")
+                        }
+                        if let readTimestamps = payload.readTimestamps {
+                            // Convert String timestamps to Date
+                            var timestamps: [String: Date] = [:]
+                            for (userId, timestampStr) in readTimestamps {
+                                if let date = ISO8601DateFormatter().date(from: timestampStr) {
+                                    timestamps[userId] = date
+                                }
+                            }
+                            msg.readTimestamps = timestamps
+                            print("   👥 Read timestamps stored for \(timestamps.count) users")
+                        }
+                    }
                 } else {
                     print("   ⚠️ Message not found or not outgoing: \(payload.messageId)")
                 }
@@ -1159,7 +1182,13 @@ struct MessageBubble: View {
                 // Read receipt label shown only for the most recent outgoing message
                 if isFromCurrentUser, isLastOutgoingRead {
                     HStack(spacing: 4) {
-                        Text("Read")
+                        // For group chats, show who has read the message
+                        if conversation.isGroupChat && !message.readByUserNames.isEmpty {
+                            Text("Read by \(formatReadByNames(message.readByUserNames))")
+                        } else {
+                            Text("Read")
+                        }
+                        
                         if let t = message.readAt {
                             Text(readTime(t))
                         }
@@ -1321,6 +1350,25 @@ struct MessageBubble: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+    
+    // Format read by names for group chats
+    private func formatReadByNames(_ names: [String]) -> String {
+        guard !names.isEmpty else { return "" }
+        
+        // Filter out current user's name
+        let otherNames = names.filter { $0 != currentUserId }
+        
+        if otherNames.isEmpty {
+            return ""
+        } else if otherNames.count == 1 {
+            return otherNames[0]
+        } else if otherNames.count == 2 {
+            return "\(otherNames[0]) and \(otherNames[1])"
+        } else {
+            // Show first 2 names and count of others
+            return "\(otherNames[0]), \(otherNames[1]) and \(otherNames.count - 2) other\(otherNames.count - 2 == 1 ? "" : "s")"
+        }
     }
 } // End of MessageBubble struct
 

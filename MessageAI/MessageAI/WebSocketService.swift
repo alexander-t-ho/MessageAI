@@ -61,7 +61,13 @@ struct MessageStatusPayload: Codable {
     let conversationId: String
     let status: String // delivered | read
     let readerId: String?
+    let readerName: String?
     let readAt: String?
+    let isGroupChat: Bool?
+    // Group chat read receipts - arrays of users who have read
+    let readByUserIds: [String]?
+    let readByUserNames: [String]?
+    let readTimestamps: [String: String]?
 }
 
 /// WebSocket Service - Manages real-time messaging connection
