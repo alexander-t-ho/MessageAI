@@ -33,6 +33,7 @@ struct ChatView: View {
     @State private var typingTimer: Timer? = nil // Timer for typing indicator timeout
     @State private var lastTypingTime: Date = Date() // Track last typing activity
     @State private var typingDotsAnimation: Bool = false // Animation trigger for typing dots
+    @State private var showGroupDetails = false // Show group details sheet
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -326,14 +327,40 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text(displayName)
-                        .font(.headline)
-                    presenceDot
+                Button(action: {
+                    if conversation.isGroupChat {
+                        showGroupDetails = true
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        VStack(spacing: 2) {
+                            Text(displayName)
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            
+                            // Show member count for group chats
+                            if conversation.isGroupChat {
+                                Text("\(conversation.participantIds.count) members")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        presenceDot
+                        
+                        // Chevron indicator for group chats
+                        if conversation.isGroupChat {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
                 }
+                .buttonStyle(PlainButtonStyle())
                 .contentShape(Rectangle())
                 .contextMenu {
-                    if isPeerOnline {
+                    if conversation.isGroupChat {
+                        Label("Group Details", systemImage: "info.circle")
+                    } else if isPeerOnline {
                         Label("Active", systemImage: "circle.fill")
                     } else {
                         Label("Offline", systemImage: "circle")
@@ -350,6 +377,13 @@ struct ChatView: View {
                         forwardToConversation(message, to: conversation)
                     }
                 )
+            }
+        }
+        .sheet(isPresented: $showGroupDetails) {
+            if conversation.isGroupChat {
+                GroupDetailsView(conversation: conversation)
+                    .environmentObject(authViewModel)
+                    .environmentObject(webSocketService)
             }
         }
         .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
