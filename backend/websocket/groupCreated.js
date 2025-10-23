@@ -17,8 +17,18 @@ const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
 
 export const handler = async (event) => {
     console.log('🎯🎯🎯 WebSocket GroupCreated Event RECEIVED 🎯🎯🎯');
+    console.log('Event:', JSON.stringify(event, null, 2));
     
     try {
+        // Check if we have requestContext
+        if (!event.requestContext) {
+            console.error('❌ No requestContext in event');
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Invalid event structure' })
+            };
+        }
+        
         // Parse request
         const connectionId = event.requestContext.connectionId;
         const domain = event.requestContext.domainName;

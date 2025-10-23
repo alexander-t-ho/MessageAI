@@ -87,6 +87,7 @@ struct ChatView: View {
                             MessageBubble(
                                 message: message,
                                 currentUserId: currentUserId, // Pass current user ID for bubble placement
+                                conversation: conversation, // Pass conversation for group chat features
                                 lastReadMessageId: lastReadOutgoingId,
                                 refreshKey: refreshTick,
                                 onReply: { replyToMessage(message) },
@@ -1018,6 +1019,7 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: MessageData
     let currentUserId: String // ✅ Added to determine bubble placement
+    let conversation: ConversationData // Added to show sender names in group chats
     let lastReadMessageId: String?
     let refreshKey: Int
     let onReply: () -> Void
@@ -1079,6 +1081,15 @@ struct MessageBubble: View {
                     }
                     
                     VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
+                    // Show sender name for group chats (only for other users' messages)
+                    if conversation.isGroupChat && !isFromCurrentUser {
+                        Text(message.senderName)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .padding(.leading, 16)
+                            .padding(.bottom, 2)
+                    }
+                    
                     // Reply context (if this message is a reply)
                     if let replyToContent = message.replyToContent,
                        let replyToSenderName = message.replyToSenderName,
