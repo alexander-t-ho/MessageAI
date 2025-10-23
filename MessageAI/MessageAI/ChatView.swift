@@ -974,17 +974,17 @@ struct MessageBubble: View {
     }
 
     var body: some View {
-        // For deleted messages, don't apply sender/receiver alignment
+        // For deleted messages, center them but keep sender's color
         if message.isDeleted {
             HStack {
                 Spacer()
                 Text("This message was deleted")
                     .font(.system(size: 12))
                     .italic()
-                    .foregroundColor(.gray)
+                    .foregroundColor(isFromCurrentUser ? .white : .gray)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .background(Color(.systemGray5))
+                    .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
                     .cornerRadius(14)
                     .scaleEffect(0.7) // 70% size
                     .opacity(0.5) // 50% opacity
