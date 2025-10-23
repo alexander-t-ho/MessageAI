@@ -40,19 +40,32 @@ export const handler = async (event) => {
         senderId,
         senderName,
         recipientId,
+        recipientIds,  // For group chats
         content,
         timestamp,
         replyToMessageId,
         replyToContent,
-        replyToSenderName
+        replyToSenderName,
+        isGroupChat
     } = messageData;
     
     // Validate required fields
-    if (!messageId || !conversationId || !senderId || !recipientId || !content) {
+    if (!messageId || !conversationId || !senderId || !content) {
         console.error('❌ Missing required fields');
         return {
             statusCode: 400,
             body: JSON.stringify({ error: 'Missing required fields' })
+        };
+    }
+    
+    // For group chats, use recipientIds; for direct messages, use recipientId
+    const recipients = isGroupChat && recipientIds ? recipientIds.filter(id => id !== senderId) : [recipientId];
+    
+    if (recipients.length === 0 || !recipients[0]) {
+        console.error('❌ No valid recipients');
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'No valid recipients' })
         };
     }
     
@@ -77,27 +90,32 @@ export const handler = async (event) => {
         }));
         
         console.log(`✅ Message saved to DynamoDB: ${messageId}`);
+        console.log(`📡 Sending to ${recipients.length} recipient(s): ${recipients.join(', ')}`);
         
-        // 2. Find recipient's connection(s)
-        const recipientConnections = await docClient.send(new QueryCommand({
-            TableName: CONNECTIONS_TABLE,
-            IndexName: 'userId-index',
-            KeyConditionExpression: 'userId = :userId',
-            ExpressionAttributeValues: {
-                ':userId': recipientId
-            }
-        }));
+        // 2. Send message to all recipients
+        const apiGateway = new ApiGatewayManagementApiClient({
+            region: process.env.AWS_REGION || 'us-east-1',
+            endpoint: `https://${domain}/${stage}`
+        });
         
-        console.log(`📡 Found ${recipientConnections.Items?.length || 0} connections for recipient ${recipientId}`);
+        let anyDelivered = false;
         
-        // 3. Send message to recipient's connection(s)
-        if (recipientConnections.Items && recipientConnections.Items.length > 0) {
-            const apiGateway = new ApiGatewayManagementApiClient({
-                region: process.env.AWS_REGION || 'us-east-1',
-                endpoint: `https://${domain}/${stage}`
-            });
+        // Loop through all recipients
+        for (const recipientId of recipients) {
+            const recipientConnections = await docClient.send(new QueryCommand({
+                TableName: CONNECTIONS_TABLE,
+                IndexName: 'userId-index',
+                KeyConditionExpression: 'userId = :userId',
+                ExpressionAttributeValues: {
+                    ':userId': recipientId
+                }
+            }));
             
-            const results = await Promise.all((recipientConnections.Items || []).map(async (connection) => {
+            console.log(`📡 Found ${recipientConnections.Items?.length || 0} connections for recipient ${recipientId}`);
+            
+            // Send to all connections for this recipient
+            if (recipientConnections.Items && recipientConnections.Items.length > 0) {
+                const results = await Promise.all((recipientConnections.Items || []).map(async (connection) => {
                 try {
                     await apiGateway.send(new PostToConnectionCommand({
                         ConnectionId: connection.connectionId,
@@ -131,12 +149,18 @@ export const handler = async (event) => {
                     }
                     return false;
                 }
-            }));
+                }));
 
-            const anyDelivered = results.some(Boolean);
-
-            // Send status ack back to sender only if at least one recipient connection succeeded
-            if (anyDelivered) try {
+                // Track if any connection succeeded
+                if (results.some(Boolean)) {
+                    anyDelivered = true;
+                }
+            }
+        }
+        
+        // 3. Send status ack back to sender if at least one recipient got the message
+        if (anyDelivered) {
+            try {
                 const senderConnections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,
                     IndexName: 'userId-index',
@@ -160,25 +184,12 @@ export const handler = async (event) => {
             } catch (e) {
                 console.error('❌ Error querying/sending sender delivery ack:', e);
             }
-
-            return {
-                statusCode: 200,
-                body: JSON.stringify({
-                    message: 'Message processed',
-                    messageId: messageId,
-                    status: anyDelivered ? 'delivered' : 'sent'
-                })
-            };
         } else {
-            // Recipient is offline - message saved to DB, will be delivered when they connect
-            console.log(`📴 Recipient ${recipientId} is offline - message saved for later delivery`);
+            // All recipients are offline - message saved to DB, will be delivered when they connect
+            console.log(`📴 All recipients offline - message saved for later delivery`);
             
             // Optional: send 'sent' ack to sender connections
             try {
-                const apiGateway = new ApiGatewayManagementApiClient({
-                    region: process.env.AWS_REGION || 'us-east-1',
-                    endpoint: `https://${domain}/${stage}`
-                });
                 const senderConnections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,
                     IndexName: 'userId-index',
@@ -202,16 +213,17 @@ export const handler = async (event) => {
             } catch (e) {
                 console.error('❌ Error sending sent ack:', e);
             }
-
-            return {
-                statusCode: 200,
-                body: JSON.stringify({
-                    message: 'Message saved',
-                    messageId: messageId,
-                    status: 'sent'
-                })
-            };
         }
+        
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: anyDelivered ? 'Message delivered' : 'Message saved',
+                messageId: messageId,
+                status: anyDelivered ? 'delivered' : 'sent',
+                recipientCount: recipients.length
+            })
+        };
         
     } catch (error) {
         console.error('❌ Error processing message:', error);

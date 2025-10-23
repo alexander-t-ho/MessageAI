@@ -162,6 +162,8 @@ class WebSocketService: ObservableObject {
         senderId: String,
         senderName: String,
         recipientId: String,
+        recipientIds: [String]? = nil,  // For group chats
+        isGroupChat: Bool = false,
         content: String,
         timestamp: Date,
         replyToMessageId: String? = nil,
@@ -174,7 +176,7 @@ class WebSocketService: ObservableObject {
         }
         
         // Create message payload
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "action": "sendMessage",
             "messageId": messageId,
             "conversationId": conversationId,
@@ -187,6 +189,15 @@ class WebSocketService: ObservableObject {
             "replyToContent": replyToContent as Any,
             "replyToSenderName": replyToSenderName as Any
         ]
+        
+        // Add group chat specific fields
+        if isGroupChat, let recipientIds = recipientIds {
+            payload["isGroupChat"] = true
+            payload["recipientIds"] = recipientIds
+            print("📤 Sending GROUP message to \(recipientIds.count) recipients")
+        } else {
+            print("📤 Sending DIRECT message to \(recipientId)")
+        }
         
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: payload)

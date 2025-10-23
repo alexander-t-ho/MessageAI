@@ -559,6 +559,7 @@ struct ChatView: View {
                 print("   Recipient ID: \(recipientId)")
                 print("   Conversation ID: \(conversation.id)")
                 print("   Participant IDs: \(conversation.participantIds)")
+                print("   Is Group Chat: \(conversation.isGroupChat)")
                 print("🚀🚀🚀")
                 webSocketService.sendMessage(
                     messageId: message.id,
@@ -566,6 +567,8 @@ struct ChatView: View {
                     senderId: currentUserId,
                     senderName: currentUserName,
                     recipientId: recipientId,
+                    recipientIds: conversation.isGroupChat ? conversation.participantIds : nil,
+                    isGroupChat: conversation.isGroupChat,
                     content: text,
                     timestamp: Date(),
                     replyToMessageId: replyingToMessage?.id,
