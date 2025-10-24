@@ -14,6 +14,7 @@ struct ConversationListView: View {
     @State private var showNewChat = false
     @State private var showingNewGroup = false
     @State private var selectedConversation: ConversationData?
+    @State private var navigationPath = NavigationPath()
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var networkToggle: Bool = false
@@ -37,7 +38,7 @@ struct ConversationListView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 if activeConversations.isEmpty {
                     // Empty state
@@ -146,6 +147,16 @@ struct ConversationListView: View {
                         syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
                     }
                     Task { await syncService?.processQueueIfPossible() }
+                }
+            }
+            .onChange(of: selectedConversation) { _, newConversation in
+                if let conversation = newConversation {
+                    // Navigate to the selected conversation
+                    navigationPath.append(conversation)
+                    // Clear selectedConversation after navigation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        selectedConversation = nil
+                    }
                 }
             }
             .onAppear {
@@ -787,12 +798,17 @@ struct NewConversationView: View {
                 participantNames: [currentUser.name, user.name] // Include both users' names for consistency
             )
             
+            // Save to database using modelContext (same as group chats)
+            modelContext.insert(conversation)
+            
             do {
-                try databaseService.saveConversation(conversation)
+                try modelContext.save()
                 print("✅ Created direct conversation with \(user.name)")
                 
-                // Navigate to the new conversation
-                selectedConversation = conversation
+                // Navigate to the new conversation after short delay to allow UI update
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    selectedConversation = conversation
+                }
                 dismiss()
             } catch {
                 print("❌ Error creating conversation: \(error)")
