@@ -68,21 +68,37 @@ class NotificationManager: NSObject, ObservableObject {
         
         DispatchQueue.main.async {
             self.deviceToken = tokenString
-            // Send token to backend
-            self.sendTokenToBackend(tokenString)
+            // Token will be sent when WebSocket connects
+            print("📱 Device token stored, will send when WebSocket is available")
+        }
+    }
+    
+    // Send stored device token to backend when WebSocket becomes available
+    func sendStoredTokenIfAvailable(webSocketService: WebSocketService) {
+        if let token = self.deviceToken,
+           let userId = UserDefaults.standard.string(forKey: "userId") {
+            webSocketService.sendDeviceToken(userId: userId, token: token)
+            print("✅ Sent stored device token to backend")
         }
     }
     
     // Send device token to backend
-    private func sendTokenToBackend(_ token: String) {
+    func sendTokenToBackend(_ token: String, webSocketService: WebSocketService? = nil) {
         // Get current user ID
         guard let userId = UserDefaults.standard.string(forKey: "userId") else {
             print("❌ No user ID found, cannot register device token")
             return
         }
         
-        // Send token via WebSocket or API
-        WebSocketService.shared.sendDeviceToken(userId: userId, token: token)
+        // Store token for later sending if WebSocket not available
+        self.deviceToken = token
+        
+        // Send token via WebSocket if available
+        if let webSocketService = webSocketService {
+            webSocketService.sendDeviceToken(userId: userId, token: token)
+        } else {
+            print("⚠️ WebSocket service not available, token stored for later sending")
+        }
     }
     
     // Handle notification registration failure
@@ -92,15 +108,31 @@ class NotificationManager: NSObject, ObservableObject {
     
     // Clear badge count
     func clearBadgeCount() {
-        DispatchQueue.main.async {
-            UIApplication.shared.applicationIconBadgeNumber = 0
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(0) { error in
+                if let error = error {
+                    print("❌ Error clearing badge count: \(error)")
+                }
+            }
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.applicationIconBadgeNumber = 0
+            }
         }
     }
     
     // Set badge count
     func setBadgeCount(_ count: Int) {
-        DispatchQueue.main.async {
-            UIApplication.shared.applicationIconBadgeNumber = count
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(count) { error in
+                if let error = error {
+                    print("❌ Error setting badge count: \(error)")
+                }
+            }
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.applicationIconBadgeNumber = count
+            }
         }
     }
 }

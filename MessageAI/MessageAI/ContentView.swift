@@ -42,6 +42,9 @@ struct ContentView: View {
                             
                             // Request notification permission after authentication
                             NotificationManager.shared.requestNotificationPermission()
+                            
+                            // Send stored device token if available (after WebSocket connects)
+                            NotificationManager.shared.sendStoredTokenIfAvailable(webSocketService: webSocketService)
                         }
                     }
                     .onDisappear {
