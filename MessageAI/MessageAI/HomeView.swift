@@ -76,9 +76,13 @@ struct ProfileView: View {
                     ProgressRow(icon: "checkmark.circle.fill", text: "Authentication", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Local Database", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Draft Messages", status: .complete, color: .green)
-                    ProgressRow(icon: "hammer.circle.fill", text: "One-on-One Messaging", status: .inProgress, color: .blue)
-                    ProgressRow(icon: "circle", text: "Real-Time Updates", status: .pending, color: .gray)
-                    ProgressRow(icon: "circle", text: "Offline Support", status: .pending, color: .gray)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Real-Time Messaging", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Read Receipts & Timestamps", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Online/Offline Presence", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Typing Indicators", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Group Chat", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Message Editing", status: .complete, color: .green)
+                    ProgressRow(icon: "hammer.circle.fill", text: "Push Notifications", status: .inProgress, color: .blue)
                 } header: {
                     Text("Development Progress")
                 }
