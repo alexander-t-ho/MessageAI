@@ -213,7 +213,8 @@ export const handler = async (event) => {
         }
         
         // Send push notifications to all recipients (both online and offline)
-        await sendPushNotifications(recipients, senderName, content, conversationId, conversation.nickname);
+        const conversationName = isGroupChat ? (nickname || `Group Chat`) : null;
+        await sendPushNotifications(recipients, senderName, content, conversationId, conversationName);
         
         // Send status acknowledgment to sender
         if (!anyDelivered) {
