@@ -450,11 +450,14 @@ struct ChatView: View {
                 handleDeletedMessage(payload)
             }
         }
+        // TODO: Add edit message handling when implementing edit feature
+        /*
         .onChange(of: webSocketService.editedMessages.count) { old, new in
             if new > old, let payload = webSocketService.editedMessages.last {
                 handleEditedMessage(payload)
             }
         }
+        */
         // After catch-up completes, force-scroll to bottom and mark all visible incoming as read
         .onChange(of: webSocketService.catchUpCounter) { _, _ in
             print("📦 catchUpComplete observed in ChatView → attempting read sync")
@@ -961,6 +964,8 @@ struct ChatView: View {
         }
     }
     
+    // TODO: Implement when adding edit feature
+    /*
     private func handleEditedMessage(_ payload: EditPayload) {
         // Only handle edits for this conversation
         guard payload.conversationId == conversation.id else { return }
@@ -999,6 +1004,7 @@ struct ChatView: View {
             print("❌ Error applying edit: \(error)")
         }
     }
+    */
     
     // Phase 6: handle delivery/read status updates (includes readAt timestamp)
     private func handleStatusUpdate(_ payload: MessageStatusPayload) {
