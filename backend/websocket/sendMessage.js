@@ -7,7 +7,7 @@
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -160,6 +160,25 @@ export const handler = async (event) => {
         
         // 3. Send status ack back to sender if at least one recipient got the message
         if (anyDelivered) {
+            // Mark message as delivered in database
+            try {
+                await docClient.send(new UpdateCommand({
+                    TableName: MESSAGES_TABLE,
+                    Key: { messageId: messageId },
+                    UpdateExpression: "SET isDelivered = :true, #status = :delivered",
+                    ExpressionAttributeNames: {
+                        "#status": "status"
+                    },
+                    ExpressionAttributeValues: {
+                        ":true": true,
+                        ":delivered": "delivered"
+                    }
+                }));
+                console.log(`✅ Message ${messageId} marked as delivered in database`);
+            } catch (e) {
+                console.error('❌ Error marking message as delivered in database:', e);
+            }
+            
             try {
                 const senderConnections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,

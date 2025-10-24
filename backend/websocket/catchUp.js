@@ -3,7 +3,7 @@
  * Resolve userId from connectionId, then push recent messages to that connection.
  */
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
@@ -40,13 +40,25 @@ export const handler = async (event) => {
   }
 
   const limit = 100;
+  
+  // Only get messages from the last 48 hours to avoid flooding with old messages
+  const twoDaysAgo = new Date();
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+  const twoDaysAgoISO = twoDaysAgo.toISOString();
 
   try {
     const resp = await docClient.send(new QueryCommand({
       TableName: MESSAGES_TABLE,
       IndexName: "recipientId-index",
       KeyConditionExpression: "recipientId = :r",
-      ExpressionAttributeValues: { ":r": userId },
+      FilterExpression: "attribute_not_exists(isDelivered) AND #ts > :cutoff",
+      ExpressionAttributeNames: {
+        "#ts": "timestamp"
+      },
+      ExpressionAttributeValues: { 
+        ":r": userId,
+        ":cutoff": twoDaysAgoISO
+      },
       ScanIndexForward: false,
       Limit: limit,
     }));
@@ -56,8 +68,12 @@ export const handler = async (event) => {
       endpoint: `https://${domain}/${stage}`,
     });
 
+    console.log(`CatchUp: Found ${resp.Items?.length || 0} undelivered messages for ${userId} from last 48 hours`);
+
     for (const m of (resp.Items || [])) {
       if (m.isDeleted) continue;
+      
+      console.log(`  - Message ${m.messageId} from ${m.senderName} in conversation ${m.conversationId}`);
       await api.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: Buffer.from(JSON.stringify({
@@ -73,9 +89,25 @@ export const handler = async (event) => {
             replyToMessageId: m.replyToMessageId || null,
             replyToContent: m.replyToContent || null,
             replyToSenderName: m.replyToSenderName || null,
+            isEdited: m.isEdited || false,
+            editedAt: m.editedAt || null,
           },
         })),
       }));
+
+      // Mark the message as delivered in the database
+      try {
+        await docClient.send(new UpdateCommand({
+          TableName: MESSAGES_TABLE,
+          Key: { messageId: m.messageId },
+          UpdateExpression: "SET isDelivered = :true",
+          ExpressionAttributeValues: {
+            ":true": true
+          }
+        }));
+      } catch (e) {
+        console.error('catchUp: failed to mark message as delivered', e);
+      }
 
       // Also notify the sender that delivery has occurred now that recipient reconnected
       try {
