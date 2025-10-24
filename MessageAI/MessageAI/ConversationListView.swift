@@ -522,6 +522,7 @@ struct NewConversationView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var webSocketService: WebSocketService
+    @Query private var conversations: [ConversationData]
     
     @Binding var showingNewGroup: Bool
     @Binding var selectedConversation: ConversationData?
