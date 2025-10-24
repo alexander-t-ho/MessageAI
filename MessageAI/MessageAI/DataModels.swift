@@ -106,6 +106,7 @@ final class ConversationData {
     var lastMessage: String?
     var lastMessageTime: Date?
     var unreadCount: Int
+    var isDeleted: Bool = false // True if conversation was deleted by user
     
     // Group-specific fields
     var createdBy: String? // User ID who created the group
@@ -124,6 +125,7 @@ final class ConversationData {
         lastMessage: String? = nil,
         lastMessageTime: Date? = nil,
         unreadCount: Int = 0,
+        isDeleted: Bool = false,
         createdBy: String? = nil,
         createdByName: String? = nil,
         createdAt: Date? = nil,
@@ -139,6 +141,7 @@ final class ConversationData {
         self.lastMessage = lastMessage
         self.lastMessageTime = lastMessageTime
         self.unreadCount = unreadCount
+        self.isDeleted = isDeleted
         self.createdBy = createdBy
         self.createdByName = createdByName
         self.createdAt = createdAt
