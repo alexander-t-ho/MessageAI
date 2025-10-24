@@ -760,12 +760,14 @@ struct ChatView: View {
             }
         }
         
-        // Notify recipient via WebSocket
+        // Notify recipients via WebSocket
         webSocketService.sendDeleteMessage(
             messageId: message.id,
             conversationId: conversation.id,
             senderId: currentUserId,
-            recipientId: recipientId
+            recipientId: recipientId,
+            recipientIds: conversation.isGroupChat ? conversation.participantIds.filter { $0 != currentUserId } : nil,
+            isGroupChat: conversation.isGroupChat
         )
     }
     

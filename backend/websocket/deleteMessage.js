@@ -27,14 +27,17 @@ export const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid body" }) };
   }
   
-  const { messageId, conversationId, senderId, recipientId } = body;
+  const { messageId, conversationId, senderId, recipientId, recipientIds, isGroupChat } = body;
   
-  if (!messageId || !conversationId || !senderId || !recipientId) {
+  if (!messageId || !conversationId || !senderId) {
     return { 
       statusCode: 400, 
-      body: JSON.stringify({ error: "messageId, conversationId, senderId, and recipientId required" }) 
+      body: JSON.stringify({ error: "messageId, conversationId, and senderId required" }) 
     };
   }
+  
+  // For group chats, use recipientIds; for direct messages, use recipientId
+  const allRecipientIds = isGroupChat && recipientIds ? recipientIds : [recipientId];
   
   try {
     // Update message as deleted in DynamoDB
@@ -56,17 +59,7 @@ export const handler = async (event) => {
     
     console.log(`Message ${messageId} marked as deleted`);
     
-    // Find recipient's connections
-    const recipientConnections = await docClient.send(new QueryCommand({
-      TableName: CONNECTIONS_TABLE,
-      IndexName: "userId-index",
-      KeyConditionExpression: "userId = :u",
-      ExpressionAttributeValues: { ":u": recipientId }
-    }));
-    
-    console.log(`Found ${recipientConnections.Items?.length || 0} connections for recipient ${recipientId}`);
-    
-    // Notify recipient's connections
+    // Notify all recipients' connections
     const api = new ApiGatewayManagementApiClient({
       region: process.env.AWS_REGION || "us-east-1",
       endpoint: `https://${domain}/${stage}`
@@ -80,26 +73,44 @@ export const handler = async (event) => {
       }
     });
     
-    const postCalls = (recipientConnections.Items || []).map(async (conn) => {
-      // Don't send to the sender's connection
-      if (conn.connectionId === connectionId) return;
-      
-      try {
-        await api.send(new PostToConnectionCommand({
-          ConnectionId: conn.connectionId,
-          Data: Buffer.from(deleteData)
-        }));
-        console.log(`✅ Sent delete notification to connection ${conn.connectionId}`);
-      } catch (sendErr) {
-        if (sendErr.statusCode === 410) {
-          console.log(`Stale connection ${conn.connectionId}, skipping`);
-        } else {
-          console.error(`Failed to send delete to ${conn.connectionId}:`, sendErr);
-        }
-      }
-    });
+    console.log(`Broadcasting delete to ${allRecipientIds.length} recipient(s)`);
+    console.log(`Is group chat: ${isGroupChat}`);
     
-    await Promise.all(postCalls);
+    // Notify all recipients
+    for (const recipId of allRecipientIds) {
+      if (!recipId) continue; // Skip empty recipient IDs
+      
+      // Find this recipient's connections
+      const recipientConnections = await docClient.send(new QueryCommand({
+        TableName: CONNECTIONS_TABLE,
+        IndexName: "userId-index",
+        KeyConditionExpression: "userId = :u",
+        ExpressionAttributeValues: { ":u": recipId }
+      }));
+      
+      console.log(`Found ${recipientConnections.Items?.length || 0} connections for recipient ${recipId}`);
+      
+      const postCalls = (recipientConnections.Items || []).map(async (conn) => {
+        // Don't send to the sender's connection
+        if (conn.connectionId === connectionId) return;
+        
+        try {
+          await api.send(new PostToConnectionCommand({
+            ConnectionId: conn.connectionId,
+            Data: Buffer.from(deleteData)
+          }));
+          console.log(`✅ Sent delete notification to ${recipId} connection ${conn.connectionId}`);
+        } catch (sendErr) {
+          if (sendErr.statusCode === 410) {
+            console.log(`Stale connection ${conn.connectionId}, skipping`);
+          } else {
+            console.error(`Failed to send delete to ${conn.connectionId}:`, sendErr);
+          }
+        }
+      });
+      
+      await Promise.all(postCalls);
+    }
     
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (e) {

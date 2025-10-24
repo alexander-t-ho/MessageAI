@@ -243,19 +243,27 @@ class WebSocketService: ObservableObject {
         messageId: String,
         conversationId: String,
         senderId: String,
-        recipientId: String
+        recipientId: String,
+        recipientIds: [String]? = nil,
+        isGroupChat: Bool = false
     ) {
         guard connectionState == .connected else {
             print("❌ Cannot send delete - not connected")
             return
         }
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "action": "deleteMessage",
             "messageId": messageId,
             "conversationId": conversationId,
             "senderId": senderId,
-            "recipientId": recipientId
+            "recipientId": recipientId,
+            "isGroupChat": isGroupChat
         ]
+        
+        // For group chats, include all recipient IDs
+        if let recipientIds = recipientIds {
+            payload["recipientIds"] = recipientIds
+        }
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
             guard let json = String(data: data, encoding: .utf8) else { return }
