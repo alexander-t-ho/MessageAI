@@ -46,14 +46,17 @@ export const handler = async (event) => {
     // Update messages to read
     for (const messageId of messageIds) {
       try {
+        // For group chats, we need to update the per-recipient record
+        const dbMessageId = isGroupChat ? `${messageId}_${readerId}` : messageId;
+        
         // First get the current message to accumulate readers
         const getMessage = await docClient.send(new GetCommand({
           TableName: MESSAGES_TABLE,
-          Key: { messageId }
+          Key: { messageId: dbMessageId }
         }));
         
         if (!getMessage.Item) {
-          console.warn(`Message ${messageId} not found`);
+          console.warn(`Message ${dbMessageId} not found (originalId: ${messageId})`);
           continue;
         }
         
@@ -103,7 +106,7 @@ export const handler = async (event) => {
         
         const res = await docClient.send(new UpdateCommand({
           TableName: MESSAGES_TABLE,
-          Key: { messageId },
+          Key: { messageId: dbMessageId }, // Use per-recipient ID for group chats
           UpdateExpression: updateExpression,
           ExpressionAttributeNames: expressionAttributeNames,
           ExpressionAttributeValues: expressionAttributeValues,

@@ -73,13 +73,16 @@ export const handler = async (event) => {
     for (const m of (resp.Items || [])) {
       if (m.isDeleted) continue;
       
-      console.log(`  - Message ${m.messageId} from ${m.senderName} in conversation ${m.conversationId}`);
+      // Use originalMessageId for group chats, regular messageId for direct
+      const actualMessageId = m.originalMessageId || m.messageId;
+      
+      console.log(`  - Message ${actualMessageId} from ${m.senderName} in conversation ${m.conversationId}${m.isGroupChat ? ' (GROUP)' : ''}`);
       await api.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: Buffer.from(JSON.stringify({
           type: "message",
           data: {
-            messageId: m.messageId,
+            messageId: actualMessageId,
             conversationId: m.conversationId,
             senderId: m.senderId,
             senderName: m.senderName,
@@ -96,10 +99,11 @@ export const handler = async (event) => {
       }));
 
       // Mark the message as delivered in the database
+      // Use the actual stored messageId (which may be messageId_recipientId for group chats)
       try {
         await docClient.send(new UpdateCommand({
           TableName: MESSAGES_TABLE,
-          Key: { messageId: m.messageId },
+          Key: { messageId: m.messageId }, // This is the stored ID (with _recipientId for groups)
           UpdateExpression: "SET isDelivered = :true",
           ExpressionAttributeValues: {
             ":true": true
@@ -120,7 +124,14 @@ export const handler = async (event) => {
         for (const c of (senderConnections.Items || [])) {
           await api.send(new PostToConnectionCommand({
             ConnectionId: c.connectionId,
-            Data: Buffer.from(JSON.stringify({ type: 'messageStatus', data: { messageId: m.messageId, conversationId: m.conversationId, status: 'delivered' } }))
+            Data: Buffer.from(JSON.stringify({ 
+              type: 'messageStatus', 
+              data: { 
+                messageId: actualMessageId, // Send original message ID to client
+                conversationId: m.conversationId, 
+                status: 'delivered' 
+              } 
+            }))
           }));
         }
       } catch (e) {

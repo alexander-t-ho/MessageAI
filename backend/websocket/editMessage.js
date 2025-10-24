@@ -34,22 +34,53 @@ export const handler = async (event) => {
 
   try {
     // Update message in DynamoDB
-    await docClient.send(new UpdateCommand({
-      TableName: MESSAGES_TABLE,
-      Key: { messageId },
-      UpdateExpression: "SET #c = :newContent, #ie = :isEdited, #ea = :editedAt",
-      ExpressionAttributeNames: {
-        "#c": "content",
-        "#ie": "isEdited",
-        "#ea": "editedAt"
-      },
-      ExpressionAttributeValues: {
-        ":newContent": newContent,
-        ":isEdited": true,
-        ":editedAt": editedAt
-      },
-      ReturnValues: "UPDATED_NEW"
-    }));
+    if (isGroupChat && recipientIds && Array.isArray(recipientIds)) {
+      // For group chats: Update all per-recipient records
+      console.log(`Editing group chat message for ${recipientIds.length} recipients`);
+      const editPromises = recipientIds.map(async (recipId) => {
+        if (recipId === senderId) return; // Skip sender's own record
+        const perRecipientMessageId = `${messageId}_${recipId}`;
+        try {
+          await docClient.send(new UpdateCommand({
+            TableName: MESSAGES_TABLE,
+            Key: { messageId: perRecipientMessageId },
+            UpdateExpression: "SET #c = :newContent, #ie = :isEdited, #ea = :editedAt",
+            ExpressionAttributeNames: {
+              "#c": "content",
+              "#ie": "isEdited",
+              "#ea": "editedAt"
+            },
+            ExpressionAttributeValues: {
+              ":newContent": newContent,
+              ":isEdited": true,
+              ":editedAt": editedAt
+            }
+          }));
+          console.log(`  - Updated ${perRecipientMessageId}`);
+        } catch (e) {
+          console.error(`  - Error editing ${perRecipientMessageId}:`, e);
+        }
+      });
+      await Promise.all(editPromises);
+    } else {
+      // For direct messages: Update single record
+      await docClient.send(new UpdateCommand({
+        TableName: MESSAGES_TABLE,
+        Key: { messageId },
+        UpdateExpression: "SET #c = :newContent, #ie = :isEdited, #ea = :editedAt",
+        ExpressionAttributeNames: {
+          "#c": "content",
+          "#ie": "isEdited",
+          "#ea": "editedAt"
+        },
+        ExpressionAttributeValues: {
+          ":newContent": newContent,
+          ":isEdited": true,
+          ":editedAt": editedAt
+        },
+        ReturnValues: "UPDATED_NEW"
+      }));
+    }
     console.log(`✅ Message ${messageId} updated in DynamoDB.`);
 
     // Notify all relevant connections

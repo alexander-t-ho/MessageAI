@@ -75,25 +75,54 @@ export const handler = async (event) => {
     
     try {
         // 1. Save message to DynamoDB
-        await docClient.send(new PutCommand({
-            TableName: MESSAGES_TABLE,
-            Item: {
-                messageId: messageId,
-                conversationId: conversationId,
-                senderId: senderId,
-                senderName: senderName,
-                recipientId: recipientId,
-                content: content,
-                timestamp: timestamp || new Date().toISOString(),
-                status: 'sent',
-                isDeleted: false,
-                replyToMessageId: replyToMessageId || null,
-                replyToContent: replyToContent || null,
-                replyToSenderName: replyToSenderName || null
-            }
-        }));
+        // For GROUP CHATS: Save one message record per recipient for proper catch-up
+        if (isGroupChat) {
+            console.log(`📝 Saving group chat message for ${recipients.length} recipients`);
+            const savePromises = recipients.map(async (recipientId) => {
+                await docClient.send(new PutCommand({
+                    TableName: MESSAGES_TABLE,
+                    Item: {
+                        messageId: `${messageId}_${recipientId}`, // Unique ID per recipient
+                        originalMessageId: messageId, // Original message ID for grouping
+                        conversationId: conversationId,
+                        senderId: senderId,
+                        senderName: senderName,
+                        recipientId: recipientId,
+                        content: content,
+                        timestamp: timestamp || new Date().toISOString(),
+                        status: 'sent',
+                        isDeleted: false,
+                        isGroupChat: true,
+                        replyToMessageId: replyToMessageId || null,
+                        replyToContent: replyToContent || null,
+                        replyToSenderName: replyToSenderName || null
+                    }
+                }));
+            });
+            await Promise.all(savePromises);
+            console.log(`✅ Group chat message saved for ${recipients.length} recipients`);
+        } else {
+            // Direct message: single record
+            await docClient.send(new PutCommand({
+                TableName: MESSAGES_TABLE,
+                Item: {
+                    messageId: messageId,
+                    conversationId: conversationId,
+                    senderId: senderId,
+                    senderName: senderName,
+                    recipientId: recipientId,
+                    content: content,
+                    timestamp: timestamp || new Date().toISOString(),
+                    status: 'sent',
+                    isDeleted: false,
+                    replyToMessageId: replyToMessageId || null,
+                    replyToContent: replyToContent || null,
+                    replyToSenderName: replyToSenderName || null
+                }
+            }));
+            console.log(`✅ Direct message saved to DynamoDB: ${messageId}`);
+        }
         
-        console.log(`✅ Message saved to DynamoDB: ${messageId}`);
         console.log(`📡 Sending to ${recipients.length} recipient(s): ${recipients.join(', ')}`);
         
         // 2. Send message to all recipients
