@@ -3,36 +3,53 @@
 ## 🍎 **Step-by-Step Guide**
 
 ### **Step 1: Log into Apple Developer**
-1. Go to [https://developer.apple.com/account](https://developer.apple.com/account)
+1. Go directly to: [https://developer.apple.com/account/resources/certificates/list](https://developer.apple.com/account/resources/certificates/list)
 2. Sign in with your Apple Developer credentials
-3. Navigate to **Certificates, Identifiers & Profiles**
+3. **Alternative:** If you're on the main account page, look for:
+   - Left sidebar: Click **Certificates, Identifiers & Profiles** OR
+   - Main page: Look for a section called **Certificates, IDs & Profiles** OR
+   - URL: Navigate directly to `developer.apple.com/account/resources`
 
-### **Step 2: Create APNs Authentication Key**
-1. Click on **Keys** in the left sidebar
-2. Click the **+** button (Create a Key)
-3. Enter a name: `MessageAI APNs Key`
-4. Check the box for **Apple Push Notifications service (APNs)**
-5. Click **Continue**
-6. Click **Register**
-7. **IMPORTANT:** Download the `.p8` file immediately
-   - ⚠️ You can only download this once!
-   - Save it in a secure location (like `~/Downloads/AuthKey_XXXXXXXXXX.p8`)
-8. Note down:
-   - **Key ID** (10 characters, e.g., `ABC123XYZ9`)
-   - **Team ID** (found in top right corner of the page, e.g., `12345ABCDE`)
+### **Step 2: Navigate to Keys Section**
+Once you're in the developer portal:
+1. **Look for the left sidebar navigation**
+2. Click on **Keys** (you should see: Certificates, Identifiers, Profiles, Keys, Devices)
+3. **Direct link:** https://developer.apple.com/account/resources/authkeys/list
 
-### **Step 3: Create App ID (if not exists)**
+### **Step 3: Create APNs Authentication Key**
+1. Click the blue **+** button (or "Create a key" button)
+2. Enter a name: `MessageAI APNs Key`
+3. **Scroll down** and check the box for **Apple Push Notifications service (APNs)**
+4. Click **Continue** button (top right)
+5. Click **Register** button
+6. 🔴 **CRITICAL:** Download the `.p8` file immediately!
+   - ⚠️ **You can ONLY download this ONCE!**
+   - Save it somewhere safe: `~/Downloads/AuthKey_XXXXXXXXXX.p8`
+   - You cannot re-download this file later!
+7. **Copy these values** (you'll need them for the setup script):
+   - **Key ID:** (10 characters, shown on the download page, e.g., `ABC123XYZ9`)
+   - **Team ID:** (shown in top right corner of ANY page, e.g., `12345ABCDE`)
+
+**Example:**
+```
+✅ Downloaded file: AuthKey_ABC123XYZ9.p8
+✅ Key ID: ABC123XYZ9
+✅ Team ID: 12345ABCDE
+```
+
+### **Step 4: Create App ID (Optional - if not exists)**
+You may need to create an App ID with Push Notifications enabled:
 1. Click on **Identifiers** in the left sidebar
 2. Click the **+** button
 3. Select **App IDs** and click **Continue**
 4. Select **App** and click **Continue**
 5. Fill in:
    - **Description:** `MessageAI`
-   - **Bundle ID:** `com.messageai.app` (or your custom bundle ID)
+   - **Bundle ID:** Match your Xcode bundle ID (e.g., `com.messageai.app`)
 6. Scroll down and check **Push Notifications**
 7. Click **Continue** then **Register**
 
-### **Step 4: Run Setup Script**
+### **Step 5: Run Setup Script**
 Now that you have the APNs key, run the setup script:
 
 ```bash
