@@ -815,6 +815,12 @@ struct ChatView: View {
             visibleMessages[index].editedAt = Date()
         }
         
+        // Update conversation's lastMessage if this was the most recent message
+        if let lastMsg = visibleMessages.last, lastMsg.id == message.id {
+            conversation.lastMessage = trimmedText
+            print("   📝 Updated conversation preview to: \(trimmedText)")
+        }
+        
         do {
             try modelContext.save()
             print("   ✅ Message edited in local database")
@@ -987,6 +993,12 @@ struct ChatView: View {
                     if let editedDate = ISO8601DateFormatter().date(from: payload.editedAt) {
                         visibleMessages[index].editedAt = editedDate
                     }
+                }
+                
+                // Update conversation's lastMessage if this was the most recent message
+                if let lastMsg = visibleMessages.last, lastMsg.id == payload.messageId {
+                    conversation.lastMessage = payload.newContent
+                    print("   📝 Updated conversation preview from edit: \(payload.newContent)")
                 }
                 
                 // Trigger UI refresh
