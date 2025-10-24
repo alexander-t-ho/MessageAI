@@ -36,6 +36,10 @@ final class MessageData {
     // Delete feature
     var isDeleted: Bool // True if message was deleted
     
+    // Edit feature
+    var isEdited: Bool = false // True if message was edited  
+    var editedAt: Date? // When the message was last edited
+    
     // Emphasis feature (like/reaction)
     var isEmphasized: Bool // True if message has emphasis
     var emphasizedBy: [String] // Array of user IDs who emphasized this message
@@ -57,6 +61,8 @@ final class MessageData {
         replyToContent: String? = nil,
         replyToSenderName: String? = nil,
         isDeleted: Bool = false,
+        isEdited: Bool = false,
+        editedAt: Date? = nil,
         isEmphasized: Bool = false,
         emphasizedBy: [String] = []
     ) {
@@ -77,6 +83,8 @@ final class MessageData {
         self.replyToContent = replyToContent
         self.replyToSenderName = replyToSenderName
         self.isDeleted = isDeleted
+        self.isEdited = isEdited
+        self.editedAt = editedAt
         self.isEmphasized = isEmphasized
         self.emphasizedBy = emphasizedBy
     }
