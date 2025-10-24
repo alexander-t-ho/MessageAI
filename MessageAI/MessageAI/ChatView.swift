@@ -24,7 +24,7 @@ struct ChatView: View {
     @State private var replyingToMessage: MessageData? // Message being replied to
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
-    @State private var messageToEdit: MessageData?
+    // @State private var messageToEdit: MessageData? // TODO: Uncomment when implementing edit
     @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
     @State private var isAtBottom: Bool = false // true when user is viewing the latest message
@@ -95,7 +95,7 @@ struct ChatView: View {
                                 onDelete: { deleteMessage(message) },
                                 onEmphasize: { toggleEmphasis(message) },
                                 onForward: { forwardMessage(message) },
-                                onEdit: { editMessage(message) },
+                                onEdit: { /* TODO: Implement edit */ },
                                 onTapReply: { scrollToMessage($0, proxy: proxy) }
                             )
                             .id(message.id)
@@ -271,7 +271,8 @@ struct ChatView: View {
                 )
             }
             
-            // Edit banner (shown when editing a message)
+            // TODO: Add edit banner when edit feature is implemented
+            /*
             if let editMessage = messageToEdit {
                 HStack(spacing: 8) {
                     Image(systemName: "pencil.circle.fill")
@@ -304,6 +305,7 @@ struct ChatView: View {
                 .padding(.vertical, 8)
                 .background(Color(.systemGray6))
             }
+            */
             
             // Input bar
             HStack(spacing: 12) {
@@ -343,17 +345,13 @@ struct ChatView: View {
                 }
                 
                 Button(action: {
-                    if messageToEdit != nil {
-                        saveEdit()
-                    } else {
-                        sendMessage()
-                    }
+                    sendMessage()
                 }) {
                     if isLoading {
                         ProgressView()
                             .frame(width: 32, height: 32)
                     } else {
-                        Image(systemName: messageToEdit != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
+                        Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 32))
                             .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
                     }
@@ -763,85 +761,15 @@ struct ChatView: View {
     }
     
     private func editMessage(_ message: MessageData) {
-        print("✏️ Edit triggered for message: \(message.id)")
-        print("   Current content: \(message.content)")
-        
-        // Only allow editing your own messages
-        guard message.senderId == currentUserId else {
-            print("   ❌ Cannot edit: not sender")
-            return
-        }
-        
-        // Cannot edit deleted messages
-        guard !message.isDeleted else {
-            print("   ❌ Cannot edit: message is deleted")
-            return
-        }
-        
-        // Set up editing state - populate message bar
-        messageToEdit = message
-        messageText = message.content
-        isInputFocused = true
+        // TODO: Implement edit feature properly after core fixes
+        print("📝 Edit feature not yet implemented")
     }
     
     private func saveEdit() {
-        guard let message = messageToEdit else { return }
-        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        guard !trimmedText.isEmpty else {
-            // Don't allow empty edits - cancel edit mode
-            messageToEdit = nil
-            messageText = ""
-            return
-        }
-        
-        // Don't save if content hasn't changed
-        guard trimmedText != message.content else {
-            messageToEdit = nil
-            messageText = ""
-            return
-        }
-        
-        print("💾 Saving edit for message: \(message.id)")
-        print("   Old: \(message.content)")
-        print("   New: \(trimmedText)")
-        
-        // Update local message
-        message.content = trimmedText
-        message.isEdited = true
-        message.editedAt = Date()
-        
-        // Update in visible messages
-        if let index = visibleMessages.firstIndex(where: { $0.id == message.id }) {
-            visibleMessages[index].content = trimmedText
-            visibleMessages[index].isEdited = true
-            visibleMessages[index].editedAt = Date()
-        }
-        
-        do {
-            try modelContext.save()
-            print("   ✅ Message edited in local database")
-            
-            // Trigger UI refresh
-            refreshTick += 1
-            
-            // Send edit to backend
-            webSocketService.sendEditMessage(
-                messageId: message.id,
-                conversationId: conversation.id,
-                senderId: currentUserId,
-                senderName: currentUserName,
-                newContent: trimmedText,
-                recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
-                isGroupChat: conversation.isGroupChat
-            )
-            
-            // Clear edit state
-            messageToEdit = nil
-            messageText = ""
-        } catch {
-            print("   ❌ Error editing message: \(error)")
-        }
+        // TODO: Implement edit feature properly after core fixes
+        // For now, just clear the edit state
+        // messageToEdit = nil
+        messageText = ""
     }
     
     private func toggleEmphasis(_ message: MessageData) {
@@ -886,7 +814,6 @@ struct ChatView: View {
         // Parse timestamp
         let formatter = ISO8601DateFormatter()
         let timestamp = formatter.date(from: payload.timestamp) ?? Date()
-        let editedAt = payload.editedAt.flatMap { formatter.date(from: $0) }
         
         // Create MessageData from payload
         // No longer need to compute isSentByCurrentUser - MessageBubble will do it!
@@ -902,9 +829,7 @@ struct ChatView: View {
             // isSentByCurrentUser removed - computed dynamically by MessageBubble
             replyToMessageId: payload.replyToMessageId,
             replyToContent: payload.replyToContent,
-            replyToSenderName: payload.replyToSenderName,
-            isEdited: payload.isEdited ?? false,
-            editedAt: editedAt
+            replyToSenderName: payload.replyToSenderName
         )
         
         // Save to database
@@ -1359,6 +1284,8 @@ struct MessageBubble: View {
                         statusIcon
                     }
                 }
+                // TODO: Add Edited label when edit feature is implemented
+                /*
                 // "Edited" label - shown for all users if message was edited
                 if message.isEdited && !isLastOutgoingRead {
                     Text("Edited")
@@ -1366,6 +1293,7 @@ struct MessageBubble: View {
                         .foregroundColor(.gray)
                         .padding(.top, 2)
                 }
+                */
                 // Read receipt with profile icons - shown only for the most recent outgoing message
                 if isFromCurrentUser, isLastOutgoingRead {
                     HStack(spacing: 6) {
@@ -1464,12 +1392,15 @@ struct MessageBubble: View {
                 )
                 .animation(.easeInOut(duration: 0.2), value: swipeOffset)
                 .contextMenu {
+                    // TODO: Add Edit option when edit feature is implemented
+                    /*
                     // Edit option - only for sender's own messages
                     if isFromCurrentUser && !message.isDeleted {
                         Button(action: onEdit) {
                             Label("Edit", systemImage: "pencil")
                         }
                     }
+                    */
                     
                     Button(action: onEmphasize) {
                         Label(
