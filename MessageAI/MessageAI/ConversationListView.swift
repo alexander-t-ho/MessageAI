@@ -402,8 +402,10 @@ extension ConversationListView {
             print("   ✅ Found existing conversation, updating last message")
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
-            // Increment unread count
-            existing.unreadCount += 1
+            // Increment unread count only if message is from someone else
+            if payload.senderId != authViewModel.currentUser?.id {
+                existing.unreadCount += 1
+            }
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
             print("   ⚠️ Conversation not found - creating new one")
@@ -482,7 +484,11 @@ extension ConversationListView {
             groupName: groupName,
             lastMessage: lastMessage?.content,
             lastMessageTime: lastMessage?.timestamp ?? createdAt,
-            unreadCount: groupMessages.filter { $0.senderId != authViewModel.currentUser?.id }.count,
+            unreadCount: groupMessages.filter { 
+                $0.senderId != authViewModel.currentUser?.id && 
+                !$0.isRead && 
+                !$0.isDeleted 
+            }.count,
             createdBy: createdBy,
             createdByName: createdByName,
             createdAt: createdAt,

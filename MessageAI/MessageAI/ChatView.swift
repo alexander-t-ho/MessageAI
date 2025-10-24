@@ -42,10 +42,14 @@ struct ChatView: View {
     
     // Calculate unread message count from other conversations
     private var totalUnreadCount: Int {
-        let otherConversations = allConversations.filter { $0.id != conversation.id }
+        // Only count from non-deleted conversations
+        let otherConversations = allConversations.filter { 
+            $0.id != conversation.id && !$0.isDeleted 
+        }
         var unreadCount = 0
         
         for conv in otherConversations {
+            // Only count non-deleted, unread messages from others
             let unreadMessages = allMessages.filter { message in
                 message.conversationId == conv.id &&
                 message.senderId != currentUserId &&
@@ -391,6 +395,15 @@ struct ChatView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
             .background(Color(.systemBackground))
+        }
+        .onAppear {
+            // Reset unread count for this conversation
+            conversation.unreadCount = 0
+            do {
+                try modelContext.save()
+            } catch {
+                print("❌ Error resetting unread count: \(error)")
+            }
         }
         .onDisappear {
             // Clean up typing indicator when leaving chat

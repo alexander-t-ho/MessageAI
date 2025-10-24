@@ -147,8 +147,13 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         
         print("📬 Received notification in foreground: \(notification.request.content.body)")
         
+        // Update badge count if specified in notification
+        if let badgeNumber = notification.request.content.badge {
+            setBadgeCount(badgeNumber.intValue)
+        }
+        
         // Show notification banner even when app is in foreground
-        completionHandler([.banner, .sound, .badge])
+        completionHandler([.banner, .sound, .badge, .list])
     }
     
     // Handle notification tap
