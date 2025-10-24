@@ -19,6 +19,7 @@ struct ConversationListView: View {
     @State private var networkToggle: Bool = false
     @State private var simulateOffline: Bool = false
     @State private var syncService: SyncService?
+    @State private var refreshID = UUID() // Force refresh after deletion
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -27,7 +28,10 @@ struct ConversationListView: View {
     // Filter out deleted conversations to prevent crashes
     private var activeConversations: [ConversationData] {
         conversations
-            .filter { !$0.isDeleted }
+            .filter { conversation in
+                // Only show conversations that are not deleted
+                return conversation.isDeleted == false
+            }
             .sorted { (conv1, conv2) in
                 // Sort by lastMessageTime, most recent first
                 let time1 = conv1.lastMessageTime ?? Date.distantPast
@@ -78,6 +82,7 @@ struct ConversationListView: View {
                         .onDelete(perform: deleteConversations)
                     }
                     .listStyle(.plain)
+                    .id(refreshID) // Force entire list to refresh when refreshID changes
                 }
             }
             .navigationTitle("Messages")
@@ -193,9 +198,17 @@ struct ConversationListView: View {
             do {
                 try databaseService.deleteConversation(conversationId: conversation.id)
                 print("✅ Conversation deleted successfully")
+                
+                // Force model context to save changes
+                try modelContext.save()
             } catch {
                 print("❌ Error deleting conversation: \(error)")
             }
+        }
+        
+        // Force UI refresh after deletion
+        DispatchQueue.main.async {
+            refreshID = UUID()
         }
     }
 }
