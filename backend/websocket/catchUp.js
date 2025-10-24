@@ -50,8 +50,8 @@ export const handler = async (event) => {
     const resp = await docClient.send(new QueryCommand({
       TableName: MESSAGES_TABLE,
       IndexName: "recipientId-index",
-      KeyConditionExpression: "recipientId = :r",
-      FilterExpression: "attribute_not_exists(isDelivered) AND #ts > :cutoff",
+      KeyConditionExpression: "recipientId = :r AND #ts > :cutoff",
+      FilterExpression: "attribute_not_exists(isDelivered)",
       ExpressionAttributeNames: {
         "#ts": "timestamp"
       },
