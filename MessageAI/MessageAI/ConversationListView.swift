@@ -202,8 +202,16 @@ struct ConversationListView: View {
 
 extension ConversationListView {
     private func handleIncomingMessage(_ payload: MessagePayload) {
+        print("📨 handleIncomingMessage called")
+        print("   Sender: \(payload.senderName) (\(payload.senderId))")
+        print("   Current user: \(authViewModel.currentUser?.name ?? "nil") (\(authViewModel.currentUser?.id ?? "nil"))")
+        print("   Conversation ID: \(payload.conversationId)")
+        
         // Ignore messages that originate from this device's user (defensive)
-        if payload.senderId == authViewModel.currentUser?.id { return }
+        if payload.senderId == authViewModel.currentUser?.id {
+            print("   ⏭️ Skipping - message from self")
+            return
+        }
         
         let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
         
@@ -226,11 +234,14 @@ extension ConversationListView {
         }
         
         // Find existing conversation or create it
+        print("   🔍 Searching for conversation \(payload.conversationId) in \(conversations.count) conversations")
         if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
+            print("   ✅ Found existing conversation, updating last message")
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
+            print("   ⚠️ Conversation not found - creating new one")
             // Auto-create conversation for direct messages
             // Note: Group conversations will be created by groupCreated event
             print("⚠️ Received message for unknown conversation: \(payload.conversationId)")
@@ -257,6 +268,10 @@ extension ConversationListView {
             do {
                 try modelContext.save()
                 print("✅ Created conversation for incoming message from \(payload.senderName)")
+                print("   Conversation ID: \(payload.conversationId)")
+                print("   Participants: \(newConversation.participantIds)")
+                print("   Last message time: \(newConversation.lastMessageTime?.description ?? "nil")")
+                print("   Total conversations now: \(conversations.count)")
             } catch {
                 print("❌ Error creating conversation: \(error)")
             }
