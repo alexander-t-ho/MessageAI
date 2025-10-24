@@ -50,7 +50,8 @@ export const handler = async (event) => {
         replyToMessageId,
         replyToContent,
         replyToSenderName,
-        isGroupChat
+        isGroupChat,
+        nickname  // Group chat nickname
     } = messageData;
     
     // Validate required fields
