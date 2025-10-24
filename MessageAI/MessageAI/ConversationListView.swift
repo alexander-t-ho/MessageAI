@@ -236,9 +236,18 @@ extension ConversationListView {
         // Find existing conversation or create it
         print("   🔍 Searching for conversation \(payload.conversationId) in \(conversations.count) conversations")
         if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
+            // Check if conversation was deleted by user - if so, don't update it
+            if existing.isDeleted {
+                print("   🚫 Conversation was deleted by user - ignoring incoming message")
+                // Note: message is still saved locally, just not shown in conversation list
+                return
+            }
+            
             print("   ✅ Found existing conversation, updating last message")
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
+            // Increment unread count
+            existing.unreadCount += 1
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
             print("   ⚠️ Conversation not found - creating new one")
