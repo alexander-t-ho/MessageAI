@@ -401,6 +401,7 @@ struct ChatView: View {
             conversation.unreadCount = 0
             do {
                 try modelContext.save()
+                // Note: Badge will be updated by ConversationListView's onChange(totalUnreadCount)
             } catch {
                 print("❌ Error resetting unread count: \(error)")
             }

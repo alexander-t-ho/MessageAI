@@ -40,6 +40,11 @@ struct ConversationListView: View {
         return conversations
     }
     
+    // Calculate total unread messages across all conversations
+    private var totalUnreadCount: Int {
+        conversations.reduce(0) { $0 + $1.unreadCount }
+    }
+    
     // Break up complex view into smaller components
     @ViewBuilder
     private var emptyStateView: some View {
@@ -244,11 +249,19 @@ struct ConversationListView: View {
                     Task { await syncService?.processQueueIfPossible() }
                 }
             }
+            .onChange(of: totalUnreadCount) { oldValue, newValue in
+                // Update app icon badge count when unread messages change
+                print("🔔 Total unread count changed: \(oldValue) → \(newValue)")
+                NotificationManager.shared.setBadgeCount(newValue)
+            }
             .onAppear {
                 if syncService == nil {
                     syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
                 }
                 Task { await syncService?.processQueueIfPossible() }
+                
+                // Set initial badge count
+                NotificationManager.shared.setBadgeCount(totalUnreadCount)
                 
                 // Clean up any duplicate direct message conversations that should be groups
                 cleanupDuplicateConversations()
