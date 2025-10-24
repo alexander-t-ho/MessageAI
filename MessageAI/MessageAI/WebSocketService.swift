@@ -96,6 +96,7 @@ class WebSocketService: ObservableObject {
     @Published var catchUpCounter: Int = 0 // increments when catch-up completes
     @Published var typingUsers: [String: String] = [:] // conversationId -> userName who is typing
     private var typingTimers: [String: Timer] = [:] // conversationId -> timer for clearing typing status
+    @Published var currentlyViewedConversationId: String? = nil // Track which conversation user is viewing
     
     // Group chat events
     @Published var groupCreatedEvents: [[String: Any]] = []
@@ -199,6 +200,7 @@ class WebSocketService: ObservableObject {
             "conversationId": conversationId,
             "senderId": senderId,
             "senderName": senderName,
+            "recipientId": recipientId,  // Always include for compatibility
             "content": content,
             "timestamp": ISO8601DateFormatter().string(from: timestamp),
             "replyToMessageId": replyToMessageId as Any,
@@ -210,11 +212,8 @@ class WebSocketService: ObservableObject {
         if isGroupChat, let recipientIds = recipientIds {
             payload["isGroupChat"] = true
             payload["recipientIds"] = recipientIds
-            // Don't include recipientId for group chats - use recipientIds instead
             print("📤 Sending GROUP message to \(recipientIds.count) recipients")
         } else {
-            // Only include recipientId for direct messages
-            payload["recipientId"] = recipientId
             print("📤 Sending DIRECT message to \(recipientId)")
         }
         

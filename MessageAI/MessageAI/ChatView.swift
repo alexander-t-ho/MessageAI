@@ -397,16 +397,34 @@ struct ChatView: View {
             .background(Color(.systemBackground))
         }
         .onAppear {
+            // Set currently viewed conversation
+            webSocketService.currentlyViewedConversationId = conversation.id
+            print("👁️ Now viewing conversation: \(conversation.id)")
+            
             // Reset unread count for this conversation
             conversation.unreadCount = 0
             do {
                 try modelContext.save()
-                // Note: Badge will be updated by ConversationListView's onChange(totalUnreadCount)
+                
+                // Immediately update badge count
+                // Calculate total unread across all conversations
+                let descriptor = FetchDescriptor<ConversationData>(
+                    predicate: #Predicate { $0.isDeleted == false }
+                )
+                if let allConversations = try? modelContext.fetch(descriptor) {
+                    let totalUnread = allConversations.reduce(0) { $0 + $1.unreadCount }
+                    NotificationManager.shared.setBadgeCount(totalUnread)
+                    print("🔔 Badge updated on chat open: \(totalUnread)")
+                }
             } catch {
                 print("❌ Error resetting unread count: \(error)")
             }
         }
         .onDisappear {
+            // Clear currently viewed conversation
+            webSocketService.currentlyViewedConversationId = nil
+            print("👁️ Left conversation")
+            
             // Clean up typing indicator when leaving chat
             sendTypingIndicator(isTyping: false)
         }

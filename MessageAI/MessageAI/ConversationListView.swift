@@ -430,8 +430,14 @@ extension ConversationListView {
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
             // Increment unread count only if message is from someone else
+            // AND user is not currently viewing this conversation
             if payload.senderId != authViewModel.currentUser?.id {
-                existing.unreadCount += 1
+                if webSocketService.currentlyViewedConversationId == payload.conversationId {
+                    print("   👁️ User is viewing this conversation - not incrementing unread count")
+                } else {
+                    existing.unreadCount += 1
+                    print("   🔔 Incremented unread count to \(existing.unreadCount)")
+                }
             }
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
