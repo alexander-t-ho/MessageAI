@@ -379,6 +379,10 @@ extension ConversationListView {
             return
         }
         
+        // Calculate total unread count for badge
+        let currentUnreadCount = conversations.reduce(0) { $0 + $1.unreadCount }
+        let newBadgeCount = currentUnreadCount + 1
+        
         // Show local notification banner for incoming message
         // This simulates a push notification banner
         let conversationName = payload.conversationName ?? payload.senderName
@@ -386,7 +390,7 @@ extension ConversationListView {
             title: conversationName,
             body: payload.content,
             conversationId: payload.conversationId,
-            badge: 1
+            badge: newBadgeCount
         )
         
         let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
