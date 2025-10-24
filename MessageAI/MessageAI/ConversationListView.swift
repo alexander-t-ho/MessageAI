@@ -225,17 +225,41 @@ extension ConversationListView {
             do { try databaseService.saveMessage(message) } catch { print("❌ Error saving incoming message: \(error)") }
         }
         
-        // Find existing conversation or wait for group creation
+        // Find existing conversation or create it
         if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
-            // Don't auto-create conversation for messages
-            // Group conversations will be created by groupCreated event
-            // Direct message conversations are created when user initiates chat
+            // Auto-create conversation for direct messages
+            // Note: Group conversations will be created by groupCreated event
             print("⚠️ Received message for unknown conversation: \(payload.conversationId)")
-            print("   Waiting for group creation event or will create on user action")
+            print("   Creating conversation for direct message from \(payload.senderName)")
+            
+            guard let currentUser = authViewModel.currentUser else {
+                print("❌ Cannot create conversation - no current user")
+                return
+            }
+            
+            // Create direct message conversation with the sender
+            let newConversation = ConversationData(
+                id: payload.conversationId, // Use the same conversation ID from the message
+                participantIds: [currentUser.id, payload.senderId],
+                participantNames: [currentUser.name, payload.senderName],
+                isGroupChat: false,
+                groupName: nil,
+                lastMessage: payload.content,
+                lastMessageTime: timestamp,
+                unreadCount: 1
+            )
+            
+            modelContext.insert(newConversation)
+            do {
+                try modelContext.save()
+                print("✅ Created conversation for incoming message from \(payload.senderName)")
+            } catch {
+                print("❌ Error creating conversation: \(error)")
+            }
         }
     }
     
