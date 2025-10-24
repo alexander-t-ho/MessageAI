@@ -70,7 +70,6 @@ struct ConversationListView: View {
         }
     }
     
-    @ViewBuilder
     private var conversationListView: some View {
         List {
             ForEach(activeConversations) { conversation in
@@ -78,7 +77,11 @@ struct ConversationListView: View {
                     .id(conversation.id)
                     .animation(.easeInOut(duration: 0.2), value: isSelectionMode)
             }
-            .onDelete(perform: isSelectionMode ? nil : deleteConversations)
+            .onDelete { offsets in
+                if !isSelectionMode {
+                    deleteConversations(at: offsets)
+                }
+            }
         }
         .listStyle(.plain)
         .id(refreshID)
@@ -167,16 +170,21 @@ struct ConversationListView: View {
     @ToolbarContentBuilder
     private var trailingToolbarItems: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
-            if isSelectionMode && !selectedConversations.isEmpty {
-                Button(action: deleteSelectedConversations) {
-                    Text("Delete (\(selectedConversations.count))")
-                        .foregroundColor(.red)
-                }
-            } else if !isSelectionMode {
-                Button(action: { showNewChat = true }) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.title3)
-                }
+            trailingButton
+        }
+    }
+    
+    @ViewBuilder
+    private var trailingButton: some View {
+        if isSelectionMode && !selectedConversations.isEmpty {
+            Button(action: deleteSelectedConversations) {
+                Text("Delete (\(selectedConversations.count))")
+                    .foregroundColor(.red)
+            }
+        } else if !isSelectionMode {
+            Button(action: { showNewChat = true }) {
+                Image(systemName: "square.and.pencil")
+                    .font(.title3)
             }
         }
     }
