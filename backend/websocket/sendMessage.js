@@ -159,6 +159,7 @@ export const handler = async (event) => {
                                 conversationId,
                                 senderId,
                                 senderName,
+                                conversationName: isGroupChat ? (nickname || 'Group Chat') : null,
                                 content,
                                 timestamp: timestamp || new Date().toISOString(),
                                 status: 'delivered',

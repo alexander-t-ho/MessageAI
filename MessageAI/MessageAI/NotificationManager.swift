@@ -135,6 +135,28 @@ class NotificationManager: NSObject, ObservableObject {
             }
         }
     }
+    
+    // Show local notification banner (simulates push notification)
+    func showLocalNotification(title: String, body: String, conversationId: String, badge: Int = 1) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.badge = NSNumber(value: badge)
+        content.userInfo = ["conversationId": conversationId]
+        
+        // Use a unique identifier for each notification
+        let identifier = UUID().uuidString
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("❌ Error showing local notification: \(error)")
+            } else {
+                print("✅ Local notification shown: \(title) - \(body)")
+            }
+        }
+    }
 }
 
 // MARK: - UNUserNotificationCenterDelegate

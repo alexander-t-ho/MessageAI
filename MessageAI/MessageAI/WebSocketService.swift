@@ -46,6 +46,7 @@ struct MessagePayload: Codable {
     let content: String
     let timestamp: String
     let status: String
+    let conversationName: String? // Group chat name or nil for direct messages
     let replyToMessageId: String?
     let replyToContent: String?
     let replyToSenderName: String?

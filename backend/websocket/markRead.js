@@ -63,6 +63,53 @@ export const handler = async (event) => {
         const currentMessage = getMessage.Item;
         const senderId = currentMessage.senderId;
         
+        // For group chats, we need to aggregate read status from ALL per-recipient records
+        let aggregatedReadByUserIds = [];
+        let aggregatedReadByUserNames = [];
+        let aggregatedReadTimestamps = {};
+        
+        if (isGroupChat) {
+          // Query all per-recipient records for this message
+          const allRecords = await docClient.send(new QueryCommand({
+            TableName: MESSAGES_TABLE,
+            IndexName: 'conversationId-timestamp-index',
+            KeyConditionExpression: 'conversationId = :cid',
+            FilterExpression: 'originalMessageId = :omid',
+            ExpressionAttributeValues: {
+              ':cid': conversationId,
+              ':omid': messageId
+            }
+          }));
+          
+          // Aggregate all readers from all records
+          const allReaders = new Set();
+          const allReaderNames = [];
+          
+          (allRecords.Items || []).forEach(record => {
+            if (record.status === 'read' || record.readAt) {
+              if (record.recipientId && record.recipientId !== senderId) {
+                allReaders.add(record.recipientId);
+                // Try to get reader name from readByUserNames or recipientId
+                if (record.readByUserNames && record.readByUserNames.length > 0) {
+                  record.readByUserNames.forEach(name => {
+                    if (!allReaderNames.includes(name)) {
+                      allReaderNames.push(name);
+                    }
+                  });
+                }
+                if (record.readTimestamps) {
+                  aggregatedReadTimestamps = { ...aggregatedReadTimestamps, ...record.readTimestamps };
+                }
+              }
+            }
+          });
+          
+          aggregatedReadByUserIds = Array.from(allReaders);
+          aggregatedReadByUserNames = allReaderNames.length > 0 ? allReaderNames : aggregatedReadByUserIds;
+          
+          console.log(`📊 Aggregated readers for ${messageId}: ${aggregatedReadByUserNames.join(', ')}`);
+        }
+        
         let updateExpression;
         let expressionAttributeNames;
         let expressionAttributeValues;
@@ -116,15 +163,16 @@ export const handler = async (event) => {
         if (senderId) {
           messageIdToSender[messageId] = {
             senderId,
-            readByUserIds: res.Attributes.readByUserIds || [],
-            readByUserNames: res.Attributes.readByUserNames || [],
-            readTimestamps: res.Attributes.readTimestamps || {}
+            // Use aggregated data for group chats, individual record for direct messages
+            readByUserIds: isGroupChat ? aggregatedReadByUserIds : (res.Attributes.readByUserIds || []),
+            readByUserNames: isGroupChat ? aggregatedReadByUserNames : (res.Attributes.readByUserNames || []),
+            readTimestamps: isGroupChat ? aggregatedReadTimestamps : (res.Attributes.readTimestamps || {})
           };
         }
         
         console.log(`✅ Marked message ${messageId} as read by ${readerName || readerId}`);
-        if (isGroupChat && res.Attributes.readByUserNames) {
-          console.log(`   All readers: ${res.Attributes.readByUserNames.join(', ')}`);
+        if (isGroupChat && aggregatedReadByUserNames.length > 0) {
+          console.log(`   All readers: ${aggregatedReadByUserNames.join(', ')}`);
         }
       } catch (e) { 
         console.error(`❌ Update read failed for ${messageId}:`, e.message); 
@@ -199,17 +247,30 @@ export const handler = async (event) => {
         
         // For group chats, also notify other group members
         if (isGroupChat) {
-          // Get all participants from the message's recipientIds or conversation
-          const currentMessage = await docClient.send(new GetCommand({
+          // Need to get all per-recipient records to find all participants
+          // Query all messages with the same originalMessageId
+          const allMessageRecords = await docClient.send(new QueryCommand({
             TableName: MESSAGES_TABLE,
-            Key: { messageId }
+            IndexName: 'conversationId-timestamp-index',
+            KeyConditionExpression: 'conversationId = :cid',
+            FilterExpression: '(originalMessageId = :omid OR messageId = :mid)',
+            ExpressionAttributeValues: { 
+              ':cid': conversationId,
+              ':omid': messageId,
+              ':mid': messageId
+            }
           }));
           
-          if (currentMessage.Item && currentMessage.Item.recipientIds) {
-            const allParticipants = new Set([
-              ...currentMessage.Item.recipientIds,
-              senderId // Include the sender
-            ]);
+          // Extract all participant IDs
+          const allParticipantIds = new Set([senderId]); // Include sender
+          (allMessageRecords.Items || []).forEach(item => {
+            if (item.recipientId) {
+              allParticipantIds.add(item.recipientId);
+            }
+          });
+          
+          if (allParticipantIds.size > 1) {
+            const allParticipants = allParticipantIds;
             
             console.log(`📨 Group chat - broadcasting to ${allParticipants.size} participants`);
             

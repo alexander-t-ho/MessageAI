@@ -366,6 +366,16 @@ extension ConversationListView {
             return
         }
         
+        // Show local notification banner for incoming message
+        // This simulates a push notification banner
+        let conversationName = payload.conversationName ?? payload.senderName
+        NotificationManager.shared.showLocalNotification(
+            title: conversationName,
+            body: payload.content,
+            conversationId: payload.conversationId,
+            badge: 1
+        )
+        
         let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
         
         // Save the message locally (avoid duplicates)
