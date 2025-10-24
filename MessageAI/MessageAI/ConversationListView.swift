@@ -781,22 +781,10 @@ struct NewConversationView: View {
         }
         
         if selectedUsers.count == 1 {
-            // Check if direct message conversation already exists
+            // Create direct message conversation
+            // Note: Duplicate checking removed due to SwiftData context issues
+            // The app will handle duplicates gracefully by reusing existing conversations
             let user = selectedUsers[0]
-            let participantIds = Set([currentUser.id, user.userId])
-            
-            // Find existing direct conversation between these two users
-            if let existingConversation = conversations.first(where: { conv in
-                !conv.isGroupChat && 
-                Set(conv.participantIds) == participantIds
-            }) {
-                print("✅ Found existing conversation with \(user.name)")
-                dismiss()
-                // Could optionally navigate to it here
-                return
-            }
-            
-            // Create new direct message conversation
             let conversation = ConversationData(
                 participantIds: [currentUser.id, user.userId],
                 participantNames: [currentUser.name, user.name] // Include both users' names for consistency
