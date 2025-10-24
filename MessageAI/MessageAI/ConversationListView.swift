@@ -40,78 +40,154 @@ struct ConversationListView: View {
         return conversations
     }
     
+    // Break up complex view into smaller components
+    @ViewBuilder
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 80))
+                .foregroundColor(.gray.opacity(0.5))
+            
+            Text("No Conversations Yet")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("Tap + to start a new conversation")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+            
+            Button(action: { showNewChat = true }) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Start New Chat")
+                }
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+            .padding(.top, 20)
+        }
+    }
+    
+    @ViewBuilder
+    private var conversationListView: some View {
+        List {
+            ForEach(activeConversations) { conversation in
+                conversationRowView(for: conversation)
+                    .id(conversation.id)
+                    .animation(.easeInOut(duration: 0.2), value: isSelectionMode)
+            }
+            .onDelete(perform: isSelectionMode ? nil : deleteConversations)
+        }
+        .listStyle(.plain)
+        .id(refreshID)
+    }
+    
+    @ViewBuilder
+    private func conversationRowView(for conversation: ConversationData) -> some View {
+        HStack {
+            if isSelectionMode {
+                Button(action: {
+                    toggleSelection(for: conversation.id)
+                }) {
+                    Image(systemName: selectedConversations.contains(conversation.id) ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(selectedConversations.contains(conversation.id) ? .blue : .gray)
+                        .font(.title3)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            if isSelectionMode {
+                ConversationRow(conversation: conversation)
+                    .onTapGesture {
+                        toggleSelection(for: conversation.id)
+                    }
+            } else {
+                NavigationLink(value: conversation) {
+                    ConversationRow(conversation: conversation)
+                }
+            }
+        }
+    }
+    
+    private func toggleSelection(for conversationId: String) {
+        if selectedConversations.contains(conversationId) {
+            selectedConversations.remove(conversationId)
+        } else {
+            selectedConversations.insert(conversationId)
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private var leadingToolbarItems: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            HStack(spacing: 12) {
+                offlineToggle
+                selectionModeButton
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var offlineToggle: some View {
+        Toggle(isOn: $simulateOffline) {
+            Image(systemName: simulateOffline ? "icloud.slash" : "icloud")
+        }
+        .labelsHidden()
+        .onChange(of: simulateOffline) { _, newVal in
+            print("🛜 Simulate Offline toggled -> \(newVal ? "ON" : "OFF")")
+            webSocketService.simulateOffline = newVal
+            if newVal {
+                print("🛜 Disconnecting WebSocket due to Simulate Offline ON")
+                webSocketService.disconnect()
+            } else if let uid = authViewModel.currentUser?.id {
+                print("🛜 Reconnecting WebSocket due to Simulate Offline OFF for userId: \(uid)")
+                webSocketService.connect(userId: uid)
+            }
+        }
+        .accessibilityLabel("Simulate Offline")
+    }
+    
+    @ViewBuilder
+    private var selectionModeButton: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isSelectionMode.toggle()
+                if !isSelectionMode {
+                    selectedConversations.removeAll()
+                }
+            }
+        }) {
+            Text(isSelectionMode ? "Done" : "Select")
+                .foregroundColor(.blue)
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private var trailingToolbarItems: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if isSelectionMode && !selectedConversations.isEmpty {
+                Button(action: deleteSelectedConversations) {
+                    Text("Delete (\(selectedConversations.count))")
+                        .foregroundColor(.red)
+                }
+            } else if !isSelectionMode {
+                Button(action: { showNewChat = true }) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.title3)
+                }
+            }
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
                 if activeConversations.isEmpty && !isSelectionMode {
-                    // Empty state
-                    VStack(spacing: 20) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 80))
-                            .foregroundColor(.gray.opacity(0.5))
-                        
-                        Text("No Conversations Yet")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Text("Tap + to start a new conversation")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                        
-                        Button(action: { showNewChat = true }) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Start New Chat")
-                            }
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                        }
-                        .padding(.top, 20)
-                    }
+                    emptyStateView
                 } else {
-                    // Conversation list
-                    List {
-                        ForEach(activeConversations) { conversation in
-                            HStack {
-                                if isSelectionMode {
-                                    Button(action: {
-                                        if selectedConversations.contains(conversation.id) {
-                                            selectedConversations.remove(conversation.id)
-                                        } else {
-                                            selectedConversations.insert(conversation.id)
-                                        }
-                                    }) {
-                                        Image(systemName: selectedConversations.contains(conversation.id) ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(selectedConversations.contains(conversation.id) ? .blue : .gray)
-                                            .font(.title3)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                                
-                                if isSelectionMode {
-                                    ConversationRow(conversation: conversation)
-                                        .onTapGesture {
-                                            if selectedConversations.contains(conversation.id) {
-                                                selectedConversations.remove(conversation.id)
-                                            } else {
-                                                selectedConversations.insert(conversation.id)
-                                            }
-                                        }
-                                } else {
-                                    NavigationLink(value: conversation) {
-                                        ConversationRow(conversation: conversation)
-                                    }
-                                }
-                            }
-                            .id(conversation.id) // Force refresh on deletion
-                            .animation(.easeInOut(duration: 0.2), value: isSelectionMode)
-                        }
-                        .onDelete(perform: isSelectionMode ? nil : deleteConversations)
-                    }
-                    .listStyle(.plain)
-                    .id(refreshID) // Force entire list to refresh when refreshID changes
+                    conversationListView
                 }
             }
             .navigationTitle("Messages")
@@ -124,51 +200,8 @@ struct ConversationListView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 12) {
-                        Toggle(isOn: $simulateOffline) {
-                            Image(systemName: simulateOffline ? "icloud.slash" : "icloud")
-                        }
-                        .labelsHidden()
-                        .onChange(of: simulateOffline) { _, newVal in
-                            print("🛜 Simulate Offline toggled -> \(newVal ? "ON" : "OFF")")
-                            webSocketService.simulateOffline = newVal
-                            if newVal {
-                                print("🛜 Disconnecting WebSocket due to Simulate Offline ON")
-                                webSocketService.disconnect()
-                            } else if let uid = authViewModel.currentUser?.id {
-                                print("🛜 Reconnecting WebSocket due to Simulate Offline OFF for userId: \(uid)")
-                                webSocketService.connect(userId: uid)
-                            }
-                        }
-                        .accessibilityLabel("Simulate Offline")
-                        
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isSelectionMode.toggle()
-                                if !isSelectionMode {
-                                    selectedConversations.removeAll()
-                                }
-                            }
-                        }) {
-                            Text(isSelectionMode ? "Done" : "Select")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isSelectionMode && !selectedConversations.isEmpty {
-                        Button(action: deleteSelectedConversations) {
-                            Text("Delete (\(selectedConversations.count))")
-                                .foregroundColor(.red)
-                        }
-                    } else if !isSelectionMode {
-                        Button(action: { showNewChat = true }) {
-                            Image(systemName: "square.and.pencil")
-                                .font(.title3)
-                        }
-                    }
-                }
+                leadingToolbarItems
+                trailingToolbarItems
             }
             .sheet(isPresented: $showNewChat) {
                 NewConversationView(showingNewGroup: $showingNewGroup, selectedConversation: $selectedConversation)
