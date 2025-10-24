@@ -39,6 +39,9 @@ struct ContentView: View {
                                 print("🔌 Connecting to WebSocket with userId: \(userId)")
                                 webSocketService.connect(userId: userId)
                             }
+                            
+                            // Request notification permission after authentication
+                            NotificationManager.shared.requestNotificationPermission()
                         }
                     }
                     .onDisappear {

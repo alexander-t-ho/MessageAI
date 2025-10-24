@@ -279,6 +279,36 @@ class WebSocketService: ObservableObject {
         }
     }
     
+    /// Send device token for push notifications
+    func sendDeviceToken(userId: String, token: String) {
+        guard connectionState == .connected else {
+            print("❌ Cannot send device token - not connected")
+            return
+        }
+        
+        let payload: [String: Any] = [
+            "action": "registerDevice",
+            "userId": userId,
+            "deviceToken": token,
+            "platform": "ios"
+        ]
+        
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            guard let json = String(data: data, encoding: .utf8) else { return }
+            let message = URLSessionWebSocketTask.Message.string(json)
+            webSocketTask?.send(message) { error in
+                if let error = error {
+                    print("❌ Error sending device token: \(error)")
+                } else {
+                    print("✅ Device token sent to backend")
+                }
+            }
+        } catch {
+            print("❌ Error serializing device token payload: \(error)")
+        }
+    }
+    
     /// Send edit message notification
     func sendEditMessage(
         messageId: String,

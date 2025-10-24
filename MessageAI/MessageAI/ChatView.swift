@@ -40,6 +40,24 @@ struct ChatView: View {
         DatabaseService(modelContext: modelContext)
     }
     
+    // Calculate unread message count from other conversations
+    private var totalUnreadCount: Int {
+        let otherConversations = allConversations.filter { $0.id != conversation.id }
+        var unreadCount = 0
+        
+        for conv in otherConversations {
+            let unreadMessages = allMessages.filter { message in
+                message.conversationId == conv.id &&
+                message.senderId != currentUserId &&
+                !message.isRead &&
+                !message.isDeleted
+            }
+            unreadCount += unreadMessages.count
+        }
+        
+        return unreadCount
+    }
+    
     // Treat connected WebSocket as online-effective for UI/queue decisions on phase-5
     private var isOnlineEffective: Bool {
         if case .connected = webSocketService.connectionState { return true }
@@ -380,7 +398,37 @@ struct ChatView: View {
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true) // Hide default back button
         .toolbar {
+            // Custom back button with unread count badge
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    dismiss()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.blue)
+                        
+                        Text("Back")
+                            .foregroundColor(.blue)
+                        
+                        // Show unread count badge if there are unread messages
+                        if totalUnreadCount > 0 {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 20, height: 20)
+                                
+                                Text("\(totalUnreadCount > 99 ? "99+" : "\(totalUnreadCount)")")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                }
+            }
+            
             ToolbarItem(placement: .principal) {
                 Button(action: {
                     if conversation.isGroupChat {

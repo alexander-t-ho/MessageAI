@@ -9,12 +9,16 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const docClient = DynamoDBDocumentClient.from(client);
+const snsClient = new SNSClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE || 'Messages_AlexHo';
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
+const DEVICES_TABLE = process.env.DEVICES_TABLE || 'DeviceTokens_AlexHo';
+const SNS_PLATFORM_APP_ARN = process.env.SNS_PLATFORM_APP_ARN;
 
 export const handler = async (event) => {
     console.log('WebSocket SendMessage Event:', JSON.stringify(event, null, 2));
@@ -206,8 +210,14 @@ export const handler = async (event) => {
         } else {
             // All recipients are offline - message saved to DB, will be delivered when they connect
             console.log(`📴 All recipients offline - message saved for later delivery`);
-            
-            // Optional: send 'sent' ack to sender connections
+        }
+        
+        // Send push notifications to all recipients (both online and offline)
+        await sendPushNotifications(recipients, senderName, content, conversationId, conversation.nickname);
+        
+        // Send status acknowledgment to sender
+        if (!anyDelivered) {
+            // Send 'sent' ack to sender connections when no one was online
             try {
                 const senderConnections = await docClient.send(new QueryCommand({
                     TableName: CONNECTIONS_TABLE,
@@ -253,3 +263,78 @@ export const handler = async (event) => {
     }
 };
 
+// Helper function to send push notifications
+async function sendPushNotifications(recipientIds, senderName, content, conversationId, conversationName) {
+    if (!SNS_PLATFORM_APP_ARN) {
+        console.log('⚠️ SNS Platform App ARN not configured - skipping push notifications');
+        return;
+    }
+    
+    for (const recipientId of recipientIds) {
+        try {
+            // Get device tokens for recipient
+            const deviceResult = await docClient.send(new QueryCommand({
+                TableName: DEVICES_TABLE,
+                KeyConditionExpression: 'userId = :userId',
+                ExpressionAttributeValues: { ':userId': recipientId }
+            }));
+            
+            if (!deviceResult.Items || deviceResult.Items.length === 0) {
+                console.log(`No device tokens found for user ${recipientId}`);
+                continue;
+            }
+            
+            // Send push notification to each device
+            for (const device of deviceResult.Items) {
+                try {
+                    const notificationBody = conversationName 
+                        ? `${senderName} in ${conversationName}: ${content}`
+                        : `${senderName}: ${content}`;
+                    
+                    const message = {
+                        default: notificationBody,
+                        APNS: JSON.stringify({
+                            aps: {
+                                alert: {
+                                    title: conversationName || senderName,
+                                    body: content
+                                },
+                                sound: 'default',
+                                badge: 1,
+                                'content-available': 1
+                            },
+                            conversationId: conversationId
+                        }),
+                        APNS_SANDBOX: JSON.stringify({
+                            aps: {
+                                alert: {
+                                    title: conversationName || senderName,
+                                    body: content
+                                },
+                                sound: 'default',
+                                badge: 1,
+                                'content-available': 1
+                            },
+                            conversationId: conversationId
+                        })
+                    };
+                    
+                    // Create platform endpoint for device
+                    const endpointArn = `${SNS_PLATFORM_APP_ARN}/${device.deviceToken}`;
+                    
+                    await snsClient.send(new PublishCommand({
+                        Message: JSON.stringify(message),
+                        MessageStructure: 'json',
+                        TargetArn: endpointArn
+                    }));
+                    
+                    console.log(`✅ Push notification sent to device ${device.deviceToken.substring(0, 10)}...`);
+                } catch (error) {
+                    console.error(`❌ Failed to send push to device:`, error);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Error getting device tokens for ${recipientId}:`, error);
+        }
+    }
+}
