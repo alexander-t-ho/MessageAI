@@ -4,7 +4,7 @@
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
@@ -53,7 +53,17 @@ export const handler = async (event) => {
         console.log(`✅ Sent presence to connection ${c.connectionId}`);
       } catch (e) {
         if (e.statusCode === 410) {
-          console.log(`Stale connection ${c.connectionId}, skipping`);
+          console.log(`Stale connection ${c.connectionId}, cleaning up`);
+          // Clean up stale connection
+          try {
+            await docClient.send(new DeleteCommand({
+              TableName: CONNECTIONS_TABLE,
+              Key: { connectionId: c.connectionId }
+            }));
+            console.log(`Cleaned up stale connection ${c.connectionId}`);
+          } catch (deleteError) {
+            console.error(`Failed to delete stale connection ${c.connectionId}:`, deleteError);
+          }
         } else {
           console.error('Presence send error:', e);
         }

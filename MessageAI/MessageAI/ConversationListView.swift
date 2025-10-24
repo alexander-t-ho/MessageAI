@@ -26,7 +26,14 @@ struct ConversationListView: View {
     
     // Filter out deleted conversations to prevent crashes
     private var activeConversations: [ConversationData] {
-        conversations.filter { !$0.isDeleted }
+        conversations
+            .filter { !$0.isDeleted }
+            .sorted { (conv1, conv2) in
+                // Sort by lastMessageTime, most recent first
+                let time1 = conv1.lastMessageTime ?? Date.distantPast
+                let time2 = conv2.lastMessageTime ?? Date.distantPast
+                return time1 > time2
+            }
     }
     
     var body: some View {
@@ -783,6 +790,9 @@ struct NewConversationView: View {
             do {
                 try databaseService.saveConversation(conversation)
                 print("✅ Created direct conversation with \(user.name)")
+                
+                // Navigate to the new conversation
+                selectedConversation = conversation
                 dismiss()
             } catch {
                 print("❌ Error creating conversation: \(error)")
