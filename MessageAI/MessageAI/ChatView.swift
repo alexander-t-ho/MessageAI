@@ -699,7 +699,12 @@ struct ChatView: View {
                 if !isOnlineEffective || !isConnected {
                 // Enqueue for later send
                 let sync = SyncService(webSocket: webSocketService, modelContext: modelContext)
-                sync.enqueue(message: message, recipientId: recipientId)
+                sync.enqueue(
+                    message: message, 
+                    recipientId: recipientId,
+                    recipientIds: conversation.participantIds,
+                    isGroupChat: conversation.isGroupChat
+                )
                 Task { await sync.processQueueIfPossible() }
             } else {
                 print("🚀🚀🚀 SENDING MESSAGE VIA WEBSOCKET:")
