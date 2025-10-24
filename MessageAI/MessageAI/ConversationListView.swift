@@ -14,7 +14,6 @@ struct ConversationListView: View {
     @State private var showNewChat = false
     @State private var showingNewGroup = false
     @State private var selectedConversation: ConversationData?
-    @State private var navigationPath = NavigationPath()
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var networkToggle: Bool = false
@@ -38,7 +37,7 @@ struct ConversationListView: View {
     }
     
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack {
             ZStack {
                 if activeConversations.isEmpty {
                     // Empty state
@@ -147,16 +146,6 @@ struct ConversationListView: View {
                         syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
                     }
                     Task { await syncService?.processQueueIfPossible() }
-                }
-            }
-            .onChange(of: selectedConversation) { _, newConversation in
-                if let conversation = newConversation {
-                    // Navigate to the selected conversation
-                    navigationPath.append(conversation)
-                    // Clear selectedConversation after navigation
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        selectedConversation = nil
-                    }
                 }
             }
             .onAppear {
@@ -791,8 +780,22 @@ struct NewConversationView: View {
         }
         
         if selectedUsers.count == 1 {
-            // Create direct message conversation
+            // Check if direct message conversation already exists
             let user = selectedUsers[0]
+            let participantIds = Set([currentUser.id, user.userId])
+            
+            // Find existing direct conversation between these two users
+            if let existingConversation = conversations.first(where: { conv in
+                !conv.isGroupChat && 
+                Set(conv.participantIds) == participantIds
+            }) {
+                print("✅ Found existing conversation with \(user.name)")
+                dismiss()
+                // Could optionally navigate to it here
+                return
+            }
+            
+            // Create new direct message conversation
             let conversation = ConversationData(
                 participantIds: [currentUser.id, user.userId],
                 participantNames: [currentUser.name, user.name] // Include both users' names for consistency
@@ -805,11 +808,10 @@ struct NewConversationView: View {
                 try modelContext.save()
                 print("✅ Created direct conversation with \(user.name)")
                 
-                // Navigate to the new conversation after short delay to allow UI update
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    selectedConversation = conversation
-                }
                 dismiss()
+                
+                // Note: Navigation will happen automatically when user taps the conversation
+                // The conversation will appear at the top of the list due to sorting by lastMessageTime
             } catch {
                 print("❌ Error creating conversation: \(error)")
             }
@@ -864,11 +866,9 @@ struct NewConversationView: View {
                 print("   Conversation ID: \(conversationId)")
                 print("   Participants: \(participantIds)")
                 
-                // Navigate to the new group conversation after short delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    selectedConversation = conversation
-                }
                 dismiss()
+                
+                // Note: The new group conversation will appear at the top of the list
             } catch {
                 print("❌ Error creating group conversation: \(error)")
             }
