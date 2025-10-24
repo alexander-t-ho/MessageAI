@@ -6,10 +6,10 @@
  * 3. Sends message to recipient via WebSocket
  */
 
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -20,7 +20,7 @@ const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
 const DEVICES_TABLE = process.env.DEVICES_TABLE || 'DeviceTokens_AlexHo';
 const SNS_PLATFORM_APP_ARN = process.env.SNS_PLATFORM_APP_ARN;
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
     console.log('WebSocket SendMessage Event:', JSON.stringify(event, null, 2));
     
     const connectionId = event.requestContext.connectionId;
