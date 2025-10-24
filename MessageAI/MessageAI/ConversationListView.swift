@@ -10,7 +10,13 @@ import SwiftData
 
 struct ConversationListView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ConversationData.lastMessageTime, order: .reverse) private var conversations: [ConversationData]
+    @Query(
+        filter: #Predicate<ConversationData> { conversation in
+            conversation.isDeleted == false
+        },
+        sort: \ConversationData.lastMessageTime, 
+        order: .reverse
+    ) private var conversations: [ConversationData]
     @State private var showNewChat = false
     @State private var showingNewGroup = false
     @State private var selectedConversation: ConversationData?
@@ -20,30 +26,24 @@ struct ConversationListView: View {
     @State private var simulateOffline: Bool = false
     @State private var syncService: SyncService?
     @State private var refreshID = UUID() // Force refresh after deletion
+    @State private var isSelectionMode = false // Multi-select mode
+    @State private var selectedConversations = Set<String>() // Selected conversation IDs
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
     }
     
-    // Filter out deleted conversations to prevent crashes
+    // Conversations are already filtered at Query level, just sort them
     private var activeConversations: [ConversationData] {
-        conversations
-            .filter { conversation in
-                // Only show conversations that are not deleted
-                return conversation.isDeleted == false
-            }
-            .sorted { (conv1, conv2) in
-                // Sort by lastMessageTime, most recent first
-                let time1 = conv1.lastMessageTime ?? Date.distantPast
-                let time2 = conv2.lastMessageTime ?? Date.distantPast
-                return time1 > time2
-            }
+        // The @Query already filters out deleted conversations
+        // We just return them sorted (although @Query also sorts, this ensures consistency)
+        return conversations
     }
     
     var body: some View {
         NavigationStack {
             ZStack {
-                if activeConversations.isEmpty {
+                if activeConversations.isEmpty && !isSelectionMode {
                     // Empty state
                     VStack(spacing: 20) {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -74,12 +74,41 @@ struct ConversationListView: View {
                     // Conversation list
                     List {
                         ForEach(activeConversations) { conversation in
-                            NavigationLink(value: conversation) {
-                                ConversationRow(conversation: conversation)
+                            HStack {
+                                if isSelectionMode {
+                                    Button(action: {
+                                        if selectedConversations.contains(conversation.id) {
+                                            selectedConversations.remove(conversation.id)
+                                        } else {
+                                            selectedConversations.insert(conversation.id)
+                                        }
+                                    }) {
+                                        Image(systemName: selectedConversations.contains(conversation.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(selectedConversations.contains(conversation.id) ? .blue : .gray)
+                                            .font(.title3)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                
+                                if isSelectionMode {
+                                    ConversationRow(conversation: conversation)
+                                        .onTapGesture {
+                                            if selectedConversations.contains(conversation.id) {
+                                                selectedConversations.remove(conversation.id)
+                                            } else {
+                                                selectedConversations.insert(conversation.id)
+                                            }
+                                        }
+                                } else {
+                                    NavigationLink(value: conversation) {
+                                        ConversationRow(conversation: conversation)
+                                    }
+                                }
                             }
                             .id(conversation.id) // Force refresh on deletion
+                            .animation(.easeInOut(duration: 0.2), value: isSelectionMode)
                         }
-                        .onDelete(perform: deleteConversations)
+                        .onDelete(perform: isSelectionMode ? nil : deleteConversations)
                     }
                     .listStyle(.plain)
                     .id(refreshID) // Force entire list to refresh when refreshID changes
@@ -96,27 +125,48 @@ struct ConversationListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Toggle(isOn: $simulateOffline) {
-                        Image(systemName: simulateOffline ? "icloud.slash" : "icloud")
-                    }
-                    .labelsHidden()
-                    .onChange(of: simulateOffline) { _, newVal in
-                        print("🛜 Simulate Offline toggled -> \(newVal ? "ON" : "OFF")")
-                        webSocketService.simulateOffline = newVal
-                        if newVal {
-                            print("🛜 Disconnecting WebSocket due to Simulate Offline ON")
-                            webSocketService.disconnect()
-                        } else if let uid = authViewModel.currentUser?.id {
-                            print("🛜 Reconnecting WebSocket due to Simulate Offline OFF for userId: \(uid)")
-                            webSocketService.connect(userId: uid)
+                    HStack(spacing: 12) {
+                        Toggle(isOn: $simulateOffline) {
+                            Image(systemName: simulateOffline ? "icloud.slash" : "icloud")
+                        }
+                        .labelsHidden()
+                        .onChange(of: simulateOffline) { _, newVal in
+                            print("🛜 Simulate Offline toggled -> \(newVal ? "ON" : "OFF")")
+                            webSocketService.simulateOffline = newVal
+                            if newVal {
+                                print("🛜 Disconnecting WebSocket due to Simulate Offline ON")
+                                webSocketService.disconnect()
+                            } else if let uid = authViewModel.currentUser?.id {
+                                print("🛜 Reconnecting WebSocket due to Simulate Offline OFF for userId: \(uid)")
+                                webSocketService.connect(userId: uid)
+                            }
+                        }
+                        .accessibilityLabel("Simulate Offline")
+                        
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isSelectionMode.toggle()
+                                if !isSelectionMode {
+                                    selectedConversations.removeAll()
+                                }
+                            }
+                        }) {
+                            Text(isSelectionMode ? "Done" : "Select")
+                                .foregroundColor(.blue)
                         }
                     }
-                    .accessibilityLabel("Simulate Offline")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showNewChat = true }) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.title3)
+                    if isSelectionMode && !selectedConversations.isEmpty {
+                        Button(action: deleteSelectedConversations) {
+                            Text("Delete (\(selectedConversations.count))")
+                                .foregroundColor(.red)
+                        }
+                    } else if !isSelectionMode {
+                        Button(action: { showNewChat = true }) {
+                            Image(systemName: "square.and.pencil")
+                                .font(.title3)
+                        }
                     }
                 }
             }
@@ -176,6 +226,50 @@ struct ConversationListView: View {
         // But NEVER removes valid direct messages between users who are also in groups together
     }
     
+    private func deleteSelectedConversations() {
+        // Delete all selected conversations
+        for conversationId in selectedConversations {
+            if let conversation = conversations.first(where: { $0.id == conversationId }) {
+                print("🗑️ Deleting selected conversation: \(conversation.id)")
+                
+                // Delete any draft for this conversation first
+                if let draft = try? modelContext.fetch(FetchDescriptor<DraftData>()).first(where: { $0.conversationId == conversation.id }) {
+                    modelContext.delete(draft)
+                }
+                
+                // Mark conversation as deleted
+                conversation.isDeleted = true
+                
+                // Delete all messages for this conversation
+                do {
+                    let messages = try databaseService.fetchMessages(for: conversation.id)
+                    for message in messages {
+                        message.isDeleted = true
+                    }
+                } catch {
+                    print("❌ Error deleting messages: \(error)")
+                }
+            }
+        }
+        
+        // Save all changes
+        do {
+            try modelContext.save()
+            print("✅ \(selectedConversations.count) conversations deleted successfully")
+        } catch {
+            print("❌ Error saving deletion: \(error)")
+        }
+        
+        // Clear selection and exit selection mode
+        selectedConversations.removeAll()
+        isSelectionMode = false
+        
+        // Force UI refresh
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            refreshID = UUID()
+        }
+    }
+    
     private func deleteConversations(at offsets: IndexSet) {
         // Convert IndexSet to array of conversations before deletion
         // Use activeConversations since that's what's displayed in the list
@@ -195,19 +289,24 @@ struct ConversationListView: View {
                 modelContext.delete(draft)
             }
             
+            // Mark conversation as deleted
+            conversation.isDeleted = true
+            
+            // Delete all messages for this conversation
             do {
-                try databaseService.deleteConversation(conversationId: conversation.id)
-                print("✅ Conversation deleted successfully")
-                
-                // Force model context to save changes
+                let messages = try databaseService.fetchMessages(for: conversation.id)
+                for message in messages {
+                    message.isDeleted = true
+                }
                 try modelContext.save()
+                print("✅ Conversation deleted successfully")
             } catch {
                 print("❌ Error deleting conversation: \(error)")
             }
         }
         
         // Force UI refresh after deletion
-        DispatchQueue.main.async {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             refreshID = UUID()
         }
     }
@@ -247,8 +346,11 @@ extension ConversationListView {
         }
         
         // Find existing conversation or create it
-        print("   🔍 Searching for conversation \(payload.conversationId) in \(conversations.count) conversations")
-        if let existing = conversations.first(where: { $0.id == payload.conversationId }) {
+        // Need to check ALL conversations including deleted ones to prevent resurrection
+        let allConversations = try? modelContext.fetch(FetchDescriptor<ConversationData>())
+        print("   🔍 Searching for conversation \(payload.conversationId) in \(allConversations?.count ?? 0) total conversations")
+        
+        if let existing = allConversations?.first(where: { $0.id == payload.conversationId }) {
             // Check if conversation was deleted by user - if so, don't update it
             if existing.isDeleted {
                 print("   🚫 Conversation was deleted by user - ignoring incoming message")
@@ -960,4 +1062,5 @@ struct UserChipCompact: View {
     ConversationListView()
         .modelContainer(for: [ConversationData.self, MessageData.self, DraftData.self])
 }
+
 
