@@ -461,13 +461,21 @@ struct ConversationRow: View {
         if conversation.isGroupChat {
             return conversation.groupName ?? "Group Chat"
         } else {
-            // Get other participant's name (not current user)
-            // Safety: Handle empty participantNames array
-            let names = conversation.participantNames
-            guard !names.isEmpty else {
-                return "Unknown User"
+            // For direct messages, show the OTHER participant's name (not current user)
+            let currentUserId = authViewModel.currentUser?.id ?? ""
+            let currentUserName = authViewModel.currentUser?.name ?? ""
+            
+            // Find the other participant's name
+            if let otherIndex = conversation.participantIds.firstIndex(where: { $0 != currentUserId }) {
+                // Use the same index to get the name from participantNames array
+                if otherIndex < conversation.participantNames.count {
+                    return conversation.participantNames[otherIndex]
+                }
             }
-            return names.first ?? "Unknown User"
+            
+            // Fallback: filter out current user's name from the list
+            let otherNames = conversation.participantNames.filter { $0 != currentUserName }
+            return otherNames.first ?? "Unknown User"
         }
     }
     
