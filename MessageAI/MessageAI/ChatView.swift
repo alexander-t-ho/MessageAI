@@ -103,35 +103,45 @@ struct ChatView: View {
                         
                         // Typing indicator as a message bubble (left side)
                         if let typingUser = webSocketService.typingUsers[conversation.id] {
-                            HStack(alignment: .bottom, spacing: 8) {
-                                // Bubble with animated dots - more visible
-                                ZStack {
-                                    // Background bubble with better visibility
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .fill(Color(.systemGray5))
-                                        .frame(width: 80, height: 44)
-                                        .shadow(color: .gray.opacity(0.2), radius: 2, x: 0, y: 1)
-                                    
-                                    // Animated dots - larger and more visible
-                                    HStack(spacing: 5) {
-                                        ForEach(0..<3) { index in
-                                            Circle()
-                                                .fill(Color.gray)
-                                                .frame(width: 12, height: 12)
-                                                .scaleEffect(typingDotsAnimation ? 1.2 : 0.8)
-                                                .animation(
-                                                    Animation.easeInOut(duration: 0.6)
-                                                        .repeatForever()
-                                                        .delay(Double(index) * 0.15),
-                                                    value: typingDotsAnimation
-                                                )
-                                        }
-                                    }
+                            VStack(alignment: .leading, spacing: 4) {
+                                // Show who is typing - especially useful in group chats
+                                if conversation.isGroupChat {
+                                    Text("\(typingUser) is typing...")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                        .padding(.leading, 12)
                                 }
                                 
-                                Spacer()
+                                HStack(alignment: .bottom, spacing: 8) {
+                                    // Bubble with animated dots - more visible
+                                    ZStack {
+                                        // Background bubble with better visibility
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(Color(.systemGray5))
+                                            .frame(width: 80, height: 44)
+                                            .shadow(color: .gray.opacity(0.2), radius: 2, x: 0, y: 1)
+                                        
+                                        // Animated dots - larger and more visible
+                                        HStack(spacing: 5) {
+                                            ForEach(0..<3) { index in
+                                                Circle()
+                                                    .fill(Color.gray)
+                                                    .frame(width: 12, height: 12)
+                                                    .scaleEffect(typingDotsAnimation ? 1.2 : 0.8)
+                                                    .animation(
+                                                        Animation.easeInOut(duration: 0.6)
+                                                            .repeatForever()
+                                                            .delay(Double(index) * 0.15),
+                                                        value: typingDotsAnimation
+                                                    )
+                                            }
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                }
+                                .padding(.leading, 12)
                             }
-                            .padding(.leading, 12)
                             .padding(.vertical, 4)
                             .id("typing-indicator")
                             .transition(.asymmetric(
@@ -1018,36 +1028,39 @@ struct ChatView: View {
             let msgs = try modelContext.fetch(fetch).filter { $0.conversationId == conversation.id && !$0.isDeleted }
             
             if payload.status == "read" {
-                // For read status, we need to find the latest outgoing message and mark only that as read
-                // Clear ALL previous outgoing read flags first
-                for m in msgs where m.senderId == currentUserId {
-                    m.isRead = false
-                    m.readAt = nil
-                }
-                
                 // Find the specific message from the payload
-                if let msg = msgs.first(where: { $0.id == payload.messageId && $0.senderId == currentUserId }) {
-                    print("   Found outgoing message to mark as read: \(msg.id)")
-                    msg.status = "read"
-                    msg.isRead = true
+                if let msg = msgs.first(where: { $0.id == payload.messageId }) {
+                    print("   Found message to mark as read: \(msg.id)")
                     
-                    // Always set a readAt timestamp
-                    if let s = payload.readAt {
-                        if let d = ISO8601DateFormatter().date(from: s) {
-                            msg.readAt = d
-                            print("   ✅ Set readAt from server=\(d) for message \(msg.id)")
-                        } else {
-                            // Failed to parse, use current time
-                            msg.readAt = Date()
-                            print("   ⚠️ Failed to parse readAt timestamp: \(s), using current time")
+                    // For outgoing messages from current user
+                    if msg.senderId == currentUserId {
+                        // For direct messages, clear previous read flags
+                        if !conversation.isGroupChat {
+                            for m in msgs where m.senderId == currentUserId {
+                                m.isRead = false
+                                m.readAt = nil
+                            }
                         }
-                    } else {
-                        // No timestamp provided, use current time
-                        msg.readAt = Date()
-                        print("   ⚠️ No readAt timestamp in payload, using current time")
+                        
+                        msg.status = "read"
+                        msg.isRead = true
+                        
+                        // Always set a readAt timestamp
+                        if let s = payload.readAt {
+                            if let d = ISO8601DateFormatter().date(from: s) {
+                                msg.readAt = d
+                                print("   ✅ Set readAt from server=\(d) for message \(msg.id)")
+                            } else {
+                                msg.readAt = Date()
+                                print("   ⚠️ Failed to parse readAt timestamp: \(s), using current time")
+                            }
+                        } else {
+                            msg.readAt = Date()
+                            print("   ⚠️ No readAt timestamp in payload, using current time")
+                        }
                     }
                     
-                    // For group chats, store who has read the message
+                    // For group chats, ALWAYS update who has read the message (regardless of sender)
                     if conversation.isGroupChat {
                         if let readByUserIds = payload.readByUserIds {
                             msg.readByUserIds = readByUserIds
@@ -1070,7 +1083,7 @@ struct ChatView: View {
                         }
                     }
                 } else {
-                    print("   ⚠️ Message not found or not outgoing: \(payload.messageId)")
+                    print("   ⚠️ Message not found: \(payload.messageId)")
                 }
             } else {
                 // For other statuses (delivered, etc), just update the specific message

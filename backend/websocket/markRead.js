@@ -196,9 +196,57 @@ export const handler = async (event) => {
         
         // For group chats, also notify other group members
         if (isGroupChat) {
-          // Get all participants from the message or conversation
-          // For now, we'll broadcast to the reader's other connections
-          console.log(`📨 Group chat - broadcasting read status to all participants`);
+          // Get all participants from the message's recipientIds or conversation
+          const currentMessage = await docClient.send(new GetCommand({
+            TableName: MESSAGES_TABLE,
+            Key: { messageId }
+          }));
+          
+          if (currentMessage.Item && currentMessage.Item.recipientIds) {
+            const allParticipants = new Set([
+              ...currentMessage.Item.recipientIds,
+              senderId // Include the sender
+            ]);
+            
+            console.log(`📨 Group chat - broadcasting to ${allParticipants.size} participants`);
+            
+            for (const participantId of allParticipants) {
+              // Skip if we already notified them
+              if (participantId === senderId || participantId === readerId) {
+                continue; // Already handled above or is the reader themselves
+              }
+              
+              // Get connections for this participant
+              const participantConnections = await docClient.send(new QueryCommand({
+                TableName: CONNECTIONS_TABLE,
+                IndexName: 'userId-index',
+                KeyConditionExpression: 'userId = :u',
+                ExpressionAttributeValues: { ':u': participantId }
+              }));
+              
+              console.log(`📨 Notifying participant (${participantId}): ${participantConnections.Items?.length || 0} connections`);
+              
+              for (const c of (participantConnections.Items || [])) {
+                try {
+                  await api.send(new PostToConnectionCommand({
+                    ConnectionId: c.connectionId,
+                    Data: Buffer.from(JSON.stringify(readStatusPayload))
+                  }));
+                  console.log(`✅ Sent read status to participant connection ${c.connectionId}`);
+                } catch (postErr) {
+                  if (postErr.statusCode === 410) {
+                    console.log(`🧹 Removing stale participant connection: ${c.connectionId}`);
+                    await docClient.send(new DeleteCommand({
+                      TableName: CONNECTIONS_TABLE,
+                      Key: { connectionId: c.connectionId }
+                    }));
+                  } else {
+                    console.error(`❌ Failed to send to ${c.connectionId}:`, postErr.message);
+                  }
+                }
+              }
+            }
+          }
         }
         
       } catch (e) {
