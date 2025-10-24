@@ -281,8 +281,17 @@ class WebSocketService: ObservableObject {
         recipientIds: [String],
         isGroupChat: Bool
     ) {
+        print("🔵 sendEditMessage called")
+        print("   Connection state: \(connectionState)")
+        print("   WebSocket task: \(webSocketTask != nil ? "exists" : "nil")")
+        
         guard connectionState == .connected else {
-            print("❌ Cannot send edit - not connected")
+            print("❌ Cannot send edit - not connected (state: \(connectionState))")
+            return
+        }
+        
+        guard webSocketTask != nil else {
+            print("❌ Cannot send edit - webSocketTask is nil")
             return
         }
         
@@ -302,20 +311,32 @@ class WebSocketService: ObservableObject {
         
         print("📤 Sending edit for message: \(messageId)")
         print("   New content: \(newContent)")
-        print("   Recipients: \(recipientIds.count)")
+        print("   Recipients: \(recipientIds)")
+        print("   Payload: \(payload)")
         
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
-            guard let json = String(data: data, encoding: .utf8) else { return }
+            guard let json = String(data: data, encoding: .utf8) else { 
+                print("❌ Failed to convert data to JSON string")
+                return 
+            }
+            print("   JSON: \(json)")
             let message = URLSessionWebSocketTask.Message.string(json)
             webSocketTask?.send(message) { error in
                 Task { @MainActor in
-                    if let error = error { print("❌ Error sending edit: \(error.localizedDescription)") }
-                    else { print("✅ Edit sent via WebSocket: \(messageId)") }
+                    if let error = error { 
+                        print("❌ Error sending edit: \(error.localizedDescription)")
+                        print("   Error details: \(error)")
+                    }
+                    else { 
+                        print("✅ Edit sent via WebSocket: \(messageId)")
+                        print("   Successfully sent to API Gateway")
+                    }
                 }
             }
         } catch {
             print("❌ Error serializing edit: \(error.localizedDescription)")
+            print("   Error details: \(error)")
         }
     }
     
