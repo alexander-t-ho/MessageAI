@@ -140,16 +140,16 @@ class DatabaseService {
     
     /// Delete a conversation and all its messages
     func deleteConversation(conversationId: String) throws {
-        print("🗑️ DatabaseService: Starting deletion of conversation \(conversationId)")
+        print("🗑️ DatabaseService: Starting soft deletion of conversation \(conversationId)")
         
-        // Delete all messages in conversation
+        // Soft delete all messages in conversation
         let messages = try fetchMessages(for: conversationId)
-        print("📧 Found \(messages.count) messages to delete")
+        print("📧 Found \(messages.count) messages to soft delete")
         for message in messages {
-            modelContext.delete(message)
+            message.isDeleted = true
         }
         
-        // Delete any pending messages for this conversation
+        // Delete any pending messages for this conversation (these can be hard deleted)
         let pendingDescriptor = FetchDescriptor<PendingMessageData>()
         if let pendingMessages = try? modelContext.fetch(pendingDescriptor) {
             let conversationPending = pendingMessages.filter { $0.conversationId == conversationId }
@@ -159,10 +159,10 @@ class DatabaseService {
             }
         }
         
-        // Delete conversation
+        // Soft delete conversation - mark as deleted, don't actually delete it
         if let conversation = try fetchConversation(id: conversationId) {
-            modelContext.delete(conversation)
-            print("✅ Conversation object deleted")
+            conversation.isDeleted = true
+            print("✅ Conversation marked as deleted")
         } else {
             print("⚠️ Conversation not found for deletion")
         }
