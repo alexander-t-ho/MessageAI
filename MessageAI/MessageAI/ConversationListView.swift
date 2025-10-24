@@ -154,33 +154,14 @@ struct ConversationListView: View {
     }
     
     private func cleanupDuplicateConversations() {
-        // Find all group conversations
-        let groupConvos = conversations.filter { $0.isGroupChat }
+        // DISABLED - This was incorrectly deleting valid direct message conversations
+        // Only cleanup true duplicates, not direct messages between group members
+        return
         
-        guard !groupConvos.isEmpty else { return }
-        
-        print("🧹 Checking for duplicate conversations...")
-        
-        // For each group, check if there are any direct message conversations
-        // with messages that belong to the group
-        for groupConvo in groupConvos {
-            // Find any non-group conversations that might have the same participants
-            let duplicates = conversations.filter { convo in
-                !convo.isGroupChat &&
-                convo.id != groupConvo.id &&
-                Set(convo.participantIds).intersection(Set(groupConvo.participantIds)).count > 1
-            }
-            
-            // Delete duplicate conversations
-            for duplicate in duplicates {
-                print("🧹 Removing duplicate conversation: \(duplicate.id)")
-                do {
-                    try databaseService.deleteConversation(conversationId: duplicate.id)
-                } catch {
-                    print("❌ Error deleting duplicate: \(error)")
-                }
-            }
-        }
+        // TODO: Implement proper duplicate detection that only removes:
+        // 1. Multiple conversations with exact same participants AND same isGroupChat status
+        // 2. Empty conversations with no messages
+        // But NEVER removes valid direct messages between users who are also in groups together
     }
     
     private func deleteConversations(at offsets: IndexSet) {
@@ -788,7 +769,7 @@ struct NewConversationView: View {
             let user = selectedUsers[0]
             let conversation = ConversationData(
                 participantIds: [currentUser.id, user.userId],
-                participantNames: [user.name] // Just store other user's name for display
+                participantNames: [currentUser.name, user.name] // Include both users' names for consistency
             )
             
             do {
