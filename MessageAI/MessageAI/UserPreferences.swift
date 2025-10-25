@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 class UserPreferences: ObservableObject {
     static let shared = UserPreferences()
