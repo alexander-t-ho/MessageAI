@@ -1,0 +1,17 @@
+{
+  "name": "messageai-ai-services",
+  "version": "1.0.0",
+  "description": "AI services for MessageAI - International Communicator",
+  "main": "translate.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.450.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
+    "@aws-sdk/client-secrets-manager": "^3.450.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "deploy-translate": "zip -q translate.zip translate.js && aws lambda update-function-code --function-name ai-translate_AlexHo --zip-file fileb://translate.zip --region us-east-1 && rm translate.zip"
+  },
+  "author": "Alex Ho",
+  "license": "ISC"
+}
