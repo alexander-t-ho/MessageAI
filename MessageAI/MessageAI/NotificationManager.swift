@@ -174,8 +174,38 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             setBadgeCount(badgeNumber.intValue)
         }
         
-        // Show notification banner even when app is in foreground
-        completionHandler([.banner, .sound, .badge, .list])
+        // Check if user is currently viewing a conversation
+        // Only show banner if on home screen or app is in background
+        let isViewingConversation = NotificationCenter.default.publisher(for: Notification.Name("CurrentConversationId"))
+            .map { $0.object as? String }
+            .replaceNil(with: "")
+            .first()
+        
+        // Get conversation ID from notification
+        let notificationConversationId = notification.request.content.userInfo["conversationId"] as? String
+        
+        // Determine if we should show banner
+        // Don't show banner if user is currently in the conversation that the message is for
+        var shouldShowBanner = true
+        
+        // Check if we're in a specific conversation
+        if let currentConvId = UserDefaults.standard.string(forKey: "currentConversationId"),
+           let notifConvId = notificationConversationId,
+           currentConvId == notifConvId {
+            shouldShowBanner = false
+            print("🔕 Suppressing notification banner - user is viewing this conversation")
+        }
+        
+        // Configure presentation options
+        if shouldShowBanner {
+            // Show banner only when not in the conversation
+            completionHandler([.banner, .sound, .badge, .list])
+            print("🔔 Showing notification banner")
+        } else {
+            // Just update badge and list, no banner or sound
+            completionHandler([.badge, .list])
+            print("🔕 Banner suppressed - showing badge only")
+        }
     }
     
     // Handle notification tap

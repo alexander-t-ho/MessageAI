@@ -265,6 +265,11 @@ struct ChatView: View {
                 .onAppear {
                     print("👁️ ChatView appeared - loading messages")
                     print("📍 Conversation ID: \(conversation.id)")
+                    
+                    // Track current conversation for notification suppression
+                    UserDefaults.standard.set(conversation.id, forKey: "currentConversationId")
+                    print("📍 Set currentConversationId for notification suppression")
+                    
                     // Initialize visible messages from query
                     visibleMessages = queriedMessages
                     print("📊 Loaded \(visibleMessages.count) messages")
@@ -297,6 +302,11 @@ struct ChatView: View {
                         print("🔄 ChatView requesting WebSocket reconnect for userId: \(uid)")
                         webSocketService.connect(userId: uid)
                     }
+                }
+                .onDisappear {
+                    // Clear current conversation ID to allow notifications
+                    UserDefaults.standard.removeObject(forKey: "currentConversationId")
+                    print("📍 Cleared currentConversationId - notifications will show")
                 }
             }
             // Check if conversation still exists
