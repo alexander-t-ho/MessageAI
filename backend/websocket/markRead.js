@@ -2,19 +2,20 @@
  * WebSocket markRead Handler
  * Marks messages as read and tracks per-user read receipts for group chats
  */
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, UpdateCommand, QueryCommand, GetCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, UpdateCommand, QueryCommand, GetCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE || "Messages_AlexHo";
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || "Connections_AlexHo";
+const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE || "Conversations_AlexHo";
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   try {
-    console.log("📖 markRead Event received");
+    console.log("[markRead] Event received");
     const domain = event.requestContext?.domainName;
     const stage = event.requestContext?.stage;
 
@@ -22,7 +23,7 @@ export const handler = async (event) => {
     try { 
       body = JSON.parse(event.body || "{}"); 
     } catch (e) { 
-      console.error('❌ Bad JSON body', e); 
+      console.error('[error] Bad JSON body', e); 
       body = {}; 
     }
     
@@ -35,7 +36,7 @@ export const handler = async (event) => {
       };
     }
 
-    console.log(`📖 Marking ${messageIds.length} messages as read`);
+    console.log(`[markRead] Marking ${messageIds.length} messages as read`);
     console.log(`   Reader: ${readerName || readerId}`);
     console.log(`   Conversation: ${conversationId}`);
     console.log(`   Is Group Chat: ${isGroupChat || false}`);
@@ -49,7 +50,7 @@ export const handler = async (event) => {
         // For group chats, we need to update the per-recipient record
         const dbMessageId = isGroupChat ? `${messageId}_${readerId}` : messageId;
         
-        // First get the current message to accumulate readers
+        // First get the current message to get sender info
         const getMessage = await docClient.send(new GetCommand({
           TableName: MESSAGES_TABLE,
           Key: { messageId: dbMessageId }
@@ -63,13 +64,71 @@ export const handler = async (event) => {
         const currentMessage = getMessage.Item;
         const senderId = currentMessage.senderId;
         
-        // For group chats, we need to aggregate read status from ALL per-recipient records
+        // STEP 1: Update the current reader's per-recipient record FIRST
+        let updateExpression;
+        let expressionAttributeNames;
+        let expressionAttributeValues;
+        
+        if (isGroupChat) {
+          // For group chats, update the per-recipient record with read status
+          updateExpression = "SET #s = :read, #ra = :ra";
+          expressionAttributeNames = { 
+            "#s": "status", 
+            "#ra": "readAt"
+          };
+          expressionAttributeValues = { 
+            ":read": "read", 
+            ":ra": readAt
+          };
+          
+          console.log(`[markRead] Marking message ${messageId} as read by ${readerName}`);
+        } else {
+          // For direct messages, simple read status
+          updateExpression = "SET #s = :read, #ra = :ra";
+          expressionAttributeNames = { "#s": "status", "#ra": "readAt" };
+          expressionAttributeValues = { ":read": "read", ":ra": readAt };
+        }
+        
+        await docClient.send(new UpdateCommand({
+          TableName: MESSAGES_TABLE,
+          Key: { messageId: dbMessageId },
+          UpdateExpression: updateExpression,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues
+        }));
+        
+        // STEP 2: For group chats, NOW aggregate read status from ALL per-recipient records
         let aggregatedReadByUserIds = [];
         let aggregatedReadByUserNames = [];
         let aggregatedReadTimestamps = {};
         
         if (isGroupChat) {
-          // Query all per-recipient records for this message
+          // First, get the conversation to map user IDs to names
+          let participantNamesMap = new Map();
+          try {
+            const conversationResult = await docClient.send(new GetCommand({
+              TableName: CONVERSATIONS_TABLE,
+              Key: { conversationId: conversationId }
+            }));
+            
+            if (conversationResult.Item) {
+              const participantIds = conversationResult.Item.participantIds || [];
+              const participantNames = conversationResult.Item.participantNames || [];
+              
+              // Create a map of userId -> name
+              participantIds.forEach((id, index) => {
+                if (index < participantNames.length) {
+                  participantNamesMap.set(id, participantNames[index]);
+                }
+              });
+              
+              console.log(`[loaded] Loaded ${participantNamesMap.size} participant names from conversation`);
+            }
+          } catch (err) {
+            console.warn(`[warning] Could not load conversation: ${err.message}`);
+          }
+          
+          // Query all per-recipient records for this message AFTER updating current user
           const allRecords = await docClient.send(new QueryCommand({
             TableName: MESSAGES_TABLE,
             IndexName: 'conversationId-timestamp-index',
@@ -83,99 +142,70 @@ export const handler = async (event) => {
           
           // Aggregate all readers from all records
           const allReaders = new Set();
-          const allReaderNames = [];
+          const allReaderNamesMap = new Map(); // userId -> name
           
           (allRecords.Items || []).forEach(record => {
-            if (record.status === 'read' || record.readAt) {
-              if (record.recipientId && record.recipientId !== senderId) {
-                allReaders.add(record.recipientId);
-                // Try to get reader name from readByUserNames or recipientId
-                if (record.readByUserNames && record.readByUserNames.length > 0) {
-                  record.readByUserNames.forEach(name => {
-                    if (!allReaderNames.includes(name)) {
-                      allReaderNames.push(name);
-                    }
-                  });
+            // Check if this per-recipient record has been marked as read
+            if ((record.status === 'read' || record.readAt) && record.recipientId && record.recipientId !== senderId) {
+              allReaders.add(record.recipientId);
+              
+              // Get name from conversation participant map
+              if (!allReaderNamesMap.has(record.recipientId)) {
+                let name;
+                // First try participant names map from conversation
+                if (participantNamesMap.has(record.recipientId)) {
+                  name = participantNamesMap.get(record.recipientId);
                 }
-                if (record.readTimestamps) {
-                  aggregatedReadTimestamps = { ...aggregatedReadTimestamps, ...record.readTimestamps };
+                // If this is the current reader, use their name from the request
+                else if (record.recipientId === readerId && readerName) {
+                  name = readerName;
                 }
+                // Fallback to recipientId
+                else {
+                  name = record.recipientId;
+                }
+                allReaderNamesMap.set(record.recipientId, name);
+                console.log(`      Mapped ${record.recipientId} -> ${name}`);
+              }
+              
+              // Add read timestamp
+              if (record.readAt) {
+                aggregatedReadTimestamps[record.recipientId] = record.readAt;
               }
             }
           });
           
           aggregatedReadByUserIds = Array.from(allReaders);
-          aggregatedReadByUserNames = allReaderNames.length > 0 ? allReaderNames : aggregatedReadByUserIds;
+          aggregatedReadByUserNames = Array.from(allReaderNamesMap.values());
           
-          console.log(`📊 Aggregated readers for ${messageId}: ${aggregatedReadByUserNames.join(', ')}`);
+          console.log(`[aggregated] Aggregated readers for ${messageId}:`);
+          console.log(`   Total records found: ${allRecords.Items?.length || 0}`);
+          console.log(`   Records marked as read: ${allReaders.size}`);
+          console.log(`   User IDs: ${aggregatedReadByUserIds.join(', ')}`);
+          console.log(`   Names: ${aggregatedReadByUserNames.join(', ')}`);
+          console.log(`   Participant map had ${participantNamesMap.size} entries`);
+          
+          // Detailed debugging
+          allRecords.Items?.forEach(record => {
+            console.log(`      Record: recipientId=${record.recipientId}, status=${record.status}, readAt=${record.readAt}, senderId=${record.senderId}`);
+          });
         }
-        
-        let updateExpression;
-        let expressionAttributeNames;
-        let expressionAttributeValues;
-        
-        if (isGroupChat) {
-          // For group chats, accumulate readers in arrays
-          const currentReadByUserIds = currentMessage.readByUserIds || [];
-          const currentReadByUserNames = currentMessage.readByUserNames || [];
-          const currentReadTimestamps = currentMessage.readTimestamps || {};
-          
-          // Add current reader if not already present
-          if (!currentReadByUserIds.includes(readerId)) {
-            currentReadByUserIds.push(readerId);
-            currentReadByUserNames.push(readerName || readerId);
-          }
-          currentReadTimestamps[readerId] = readAt;
-          
-          updateExpression = "SET #s = :read, #ra = :ra, #rids = :rids, #rnames = :rnames, #rts = :rts";
-          expressionAttributeNames = { 
-            "#s": "status", 
-            "#ra": "readAt",
-            "#rids": "readByUserIds",
-            "#rnames": "readByUserNames",
-            "#rts": "readTimestamps"
-          };
-          expressionAttributeValues = { 
-            ":read": "read", 
-            ":ra": readAt,
-            ":rids": currentReadByUserIds,
-            ":rnames": currentReadByUserNames,
-            ":rts": currentReadTimestamps
-          };
-          
-          console.log(`📖 Group read tracking: ${currentReadByUserNames.join(', ')}`);
-        } else {
-          // For direct messages, simple read status
-          updateExpression = "SET #s = :read, #ra = :ra";
-          expressionAttributeNames = { "#s": "status", "#ra": "readAt" };
-          expressionAttributeValues = { ":read": "read", ":ra": readAt };
-        }
-        
-        const res = await docClient.send(new UpdateCommand({
-          TableName: MESSAGES_TABLE,
-          Key: { messageId: dbMessageId }, // Use per-recipient ID for group chats
-          UpdateExpression: updateExpression,
-          ExpressionAttributeNames: expressionAttributeNames,
-          ExpressionAttributeValues: expressionAttributeValues,
-          ReturnValues: "ALL_NEW"
-        }));
         
         if (senderId) {
           messageIdToSender[messageId] = {
             senderId,
-            // Use aggregated data for group chats, individual record for direct messages
-            readByUserIds: isGroupChat ? aggregatedReadByUserIds : (res.Attributes.readByUserIds || []),
-            readByUserNames: isGroupChat ? aggregatedReadByUserNames : (res.Attributes.readByUserNames || []),
-            readTimestamps: isGroupChat ? aggregatedReadTimestamps : (res.Attributes.readTimestamps || {})
+            readByUserIds: isGroupChat ? aggregatedReadByUserIds : [],
+            readByUserNames: isGroupChat ? aggregatedReadByUserNames : [],
+            readTimestamps: isGroupChat ? aggregatedReadTimestamps : {}
           };
         }
         
-        console.log(`✅ Marked message ${messageId} as read by ${readerName || readerId}`);
+        console.log(`[success] Marked message ${messageId} as read by ${readerName || readerId}`);
         if (isGroupChat && aggregatedReadByUserNames.length > 0) {
           console.log(`   All readers: ${aggregatedReadByUserNames.join(', ')}`);
         }
       } catch (e) { 
-        console.error(`❌ Update read failed for ${messageId}:`, e.message); 
+        console.error(`[error] Update read failed for ${messageId}:`, e.message); 
       }
     }
 
@@ -188,7 +218,7 @@ export const handler = async (event) => {
     for (const messageId of messageIds) {
       const messageInfo = messageIdToSender[messageId];
       if (!messageInfo) {
-        console.warn(`⚠️ Could not resolve sender for ${messageId}`);
+        console.warn(`[warning] Could not resolve sender for ${messageId}`);
         continue;
       }
       
@@ -214,6 +244,12 @@ export const handler = async (event) => {
         }
       };
       
+      console.log(`[sending] Sending read status payload for message ${messageId}:`);
+      console.log(`   isGroupChat: ${isGroupChat}`);
+      console.log(`   readByUserIds: ${JSON.stringify(readByUserIds)}`);
+      console.log(`   readByUserNames: ${JSON.stringify(readByUserNames)}`);
+      console.log(`   Full payload: ${JSON.stringify(readStatusPayload, null, 2)}`);
+      
       try {
         // Notify sender's connections
         const senderConnections = await docClient.send(new QueryCommand({
@@ -223,7 +259,7 @@ export const handler = async (event) => {
           ExpressionAttributeValues: { ':u': senderId }
         }));
         
-        console.log(`📨 Notifying sender (${senderId}): ${senderConnections.Items?.length || 0} connections`);
+        console.log(`[notifying] Notifying sender (${senderId}): ${senderConnections.Items?.length || 0} connections`);
         
         for (const c of (senderConnections.Items || [])) {
           try {
@@ -231,16 +267,16 @@ export const handler = async (event) => {
               ConnectionId: c.connectionId,
               Data: Buffer.from(JSON.stringify(readStatusPayload))
             }));
-            console.log(`✅ Sent read status to sender connection ${c.connectionId}`);
+            console.log(`[success] Sent read status to sender connection ${c.connectionId}`);
           } catch (postErr) {
             if (postErr.statusCode === 410) {
-              console.log(`🧹 Removing stale sender connection: ${c.connectionId}`);
+              console.log(`[cleanup] Removing stale sender connection: ${c.connectionId}`);
               await docClient.send(new DeleteCommand({
                 TableName: CONNECTIONS_TABLE,
                 Key: { connectionId: c.connectionId }
               }));
             } else {
-              console.error(`❌ Failed to send to ${c.connectionId}:`, postErr.message);
+              console.error(`[error] Failed to send to ${c.connectionId}:`, postErr.message);
             }
           }
         }
@@ -272,7 +308,7 @@ export const handler = async (event) => {
           if (allParticipantIds.size > 1) {
             const allParticipants = allParticipantIds;
             
-            console.log(`📨 Group chat - broadcasting to ${allParticipants.size} participants`);
+            console.log(`[notifying] Group chat - broadcasting to ${allParticipants.size} participants`);
             
             for (const participantId of allParticipants) {
               // Skip if we already notified them
@@ -288,7 +324,7 @@ export const handler = async (event) => {
                 ExpressionAttributeValues: { ':u': participantId }
               }));
               
-              console.log(`📨 Notifying participant (${participantId}): ${participantConnections.Items?.length || 0} connections`);
+              console.log(`[notifying] Notifying participant (${participantId}): ${participantConnections.Items?.length || 0} connections`);
               
               for (const c of (participantConnections.Items || [])) {
                 try {
@@ -296,16 +332,16 @@ export const handler = async (event) => {
                     ConnectionId: c.connectionId,
                     Data: Buffer.from(JSON.stringify(readStatusPayload))
                   }));
-                  console.log(`✅ Sent read status to participant connection ${c.connectionId}`);
+                  console.log(`[success] Sent read status to participant connection ${c.connectionId}`);
                 } catch (postErr) {
                   if (postErr.statusCode === 410) {
-                    console.log(`🧹 Removing stale participant connection: ${c.connectionId}`);
+                    console.log(`[cleanup] Removing stale participant connection: ${c.connectionId}`);
                     await docClient.send(new DeleteCommand({
                       TableName: CONNECTIONS_TABLE,
                       Key: { connectionId: c.connectionId }
                     }));
                   } else {
-                    console.error(`❌ Failed to send to ${c.connectionId}:`, postErr.message);
+                    console.error(`[error] Failed to send to ${c.connectionId}:`, postErr.message);
                   }
                 }
               }
@@ -314,7 +350,7 @@ export const handler = async (event) => {
         }
         
       } catch (e) {
-        console.error(`❌ Error notifying for ${messageId}:`, e.message);
+        console.error(`[error] Error notifying for ${messageId}:`, e.message);
       }
     }
 
@@ -328,7 +364,7 @@ export const handler = async (event) => {
     };
     
   } catch (e) {
-    console.error("❌ Fatal error in markRead:", e);
+    console.error("[error] Fatal error in markRead:", e);
     return { 
       statusCode: 500, 
       body: JSON.stringify({ error: e.message }) 
