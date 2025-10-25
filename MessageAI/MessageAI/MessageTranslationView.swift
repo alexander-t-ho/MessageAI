@@ -322,13 +322,7 @@ struct MessageTranslationView: View {
                         messageId: message.id
                     )
                     isTranslating = false
-                    
-                    // Check for cultural context
-                    await aiService.getCulturalContext(
-                        for: message.content,
-                        targetLang: aiService.preferredLanguage,
-                        messageId: message.id
-                    )
+                    // Note: Cultural context (slang) is requested separately via "Explain Slang" button
                 }
             }
         }
