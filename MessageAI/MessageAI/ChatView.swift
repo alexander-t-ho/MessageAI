@@ -26,6 +26,9 @@ struct ChatView: View {
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
     @State private var messageToEdit: MessageData?
+    @State private var showTranslationSheet = false
+    @State private var messageToTranslate: MessageData?
+    @State private var translationType: TranslationSheetView.TranslationType = .translate
     @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
     @State private var isAtBottom: Bool = false // true when user is viewing the latest message
@@ -537,6 +540,14 @@ struct ChatView: View {
                 GroupDetailsView(conversation: conversation)
                     .environmentObject(authViewModel)
                     .environmentObject(webSocketService)
+            }
+        }
+        .sheet(isPresented: $showTranslationSheet) {
+            if let message = messageToTranslate {
+                TranslationSheetView(
+                    message: message,
+                    translationType: translationType
+                )
             }
         }
         .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
@@ -1532,79 +1543,6 @@ struct MessageBubble: View {
                     .padding(.top, 4)
                 }
                     } // End of VStack
-                    
-                    // Translation display - show below message if available
-                    if let translation = AITranslationService.shared.translations[message.id],
-                       !isFromCurrentUser {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.turn.down.right")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.blue)
-                                Text("Translated to \(AITranslationService.shared.preferredLanguage.displayName)")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                            .padding(.top, 4)
-                            
-                            Text(translation.translatedText ?? message.content)
-                                .font(.callout)
-                                .foregroundColor(.primary)
-                                .padding(12)
-                                .background(Color.blue.opacity(0.05))
-                                .cornerRadius(12)
-                        }
-                        .padding(.top, 4)
-                    }
-                    
-                    // Slang & Cultural Context - Always shown for better understanding
-                    if let hints = AITranslationService.shared.culturalHints[message.id],
-                       !hints.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "lightbulb.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.orange)
-                                Text("Slang & Context")
-                                    .font(.caption2)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.orange)
-                            }
-                            .padding(.top, 4)
-                            
-                            ForEach(hints, id: \.phrase) { hint in
-                                VStack(alignment: .leading, spacing: 3) {
-                                    // The slang term highlighted
-                                    Text("**\"\(hint.phrase)\"**")
-                                        .font(.caption)
-                                        .foregroundColor(.primary)
-                                    
-                                    // What it means
-                                    HStack(alignment: .top, spacing: 4) {
-                                        Text("Means:")
-                                            .font(.caption2)
-                                            .foregroundColor(.orange)
-                                            .fontWeight(.medium)
-                                        Text(hint.actualMeaning)
-                                            .font(.caption2)
-                                            .foregroundColor(.primary)
-                                    }
-                                    
-                                    // Context/explanation
-                                    if !hint.explanation.isEmpty {
-                                        Text(hint.explanation)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                            .italic()
-                                    }
-                                }
-                                .padding(8)
-                                .background(Color.orange.opacity(0.05))
-                                .cornerRadius(8)
-                            }
-                        }
-                        .padding(.top, 4)
-                    }
                 } // End of ZStack
                 .offset(x: swipeOffset)
                 // force view refresh when status updates tick changes so latest read attaches correctly
@@ -1661,32 +1599,27 @@ struct MessageBubble: View {
                     // AI Understanding options - only for incoming messages
                     if !isFromCurrentUser && !message.isDeleted {
                         Button(action: { 
-                            Task {
-                                await AITranslationService.shared.translateMessage(
-                                    message.content,
-                                    messageId: message.id
-                                )
-                                // Also check for slang/cultural context automatically
-                                await AITranslationService.shared.getCulturalContext(
-                                    for: message.content,
-                                    targetLang: AITranslationService.shared.preferredLanguage,
-                                    messageId: message.id
-                                )
-                            }
+                            messageToTranslate = message
+                            translationType = .translate
+                            showTranslationSheet = true
                         }) {
                             Label("Translate", systemImage: "globe")
                         }
                         
                         Button(action: { 
-                            Task {
-                                await AITranslationService.shared.getCulturalContext(
-                                    for: message.content,
-                                    targetLang: AITranslationService.shared.preferredLanguage,
-                                    messageId: message.id
-                                )
-                            }
+                            messageToTranslate = message
+                            translationType = .explainSlang
+                            showTranslationSheet = true
                         }) {
                             Label("Explain Slang", systemImage: "lightbulb.fill")
+                        }
+                        
+                        Button(action: { 
+                            messageToTranslate = message
+                            translationType = .both
+                            showTranslationSheet = true
+                        }) {
+                            Label("Translate & Explain", systemImage: "sparkles")
                         }
                         
                         Divider()
