@@ -52,41 +52,28 @@ struct MessageTranslationView: View {
             }
             
             // Main message content
-            if message.messageType == "image", let imageUrl = message.imageUrl {
-                AsyncImage(url: URL(string: imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: 200)
-                        .cornerRadius(12)
-                } placeholder: {
-                    ProgressView()
-                        .frame(width: 200, height: 200)
-                }
-            } else {
-                Text(message.content)
-                    .foregroundColor(isFromCurrentUser ? .white : .primary)
-                    .contextMenu {
-                        if !isFromCurrentUser {
-                            Button(action: { translateMessage() }) {
-                                Label("Translate", systemImage: "globe")
-                            }
-                            
-                            if hasTranslation {
-                                Menu("Adjust Formality") {
-                                    Button("Casual") { adjustFormality("casual") }
-                                    Button("Neutral") { adjustFormality("neutral") }
-                                    Button("Formal") { adjustFormality("formal") }
-                                    Button("Very Formal") { adjustFormality("very_formal") }
-                                }
-                            }
+            Text(message.content)
+                .foregroundColor(isFromCurrentUser ? .white : .primary)
+                .contextMenu {
+                    if !isFromCurrentUser {
+                        Button(action: { translateMessage() }) {
+                            Label("Translate", systemImage: "globe")
                         }
                         
-                        Button(action: { copyToClipboard() }) {
-                            Label("Copy", systemImage: "doc.on.doc")
+                        if hasTranslation {
+                            Menu("Adjust Formality") {
+                                Button("Casual") { adjustFormality("casual") }
+                                Button("Neutral") { adjustFormality("neutral") }
+                                Button("Formal") { adjustFormality("formal") }
+                                Button("Very Formal") { adjustFormality("very_formal") }
+                            }
                         }
                     }
-            }
+                    
+                    Button(action: { copyToClipboard() }) {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                }
             
             // Timestamp and status
             HStack(spacing: 4) {
