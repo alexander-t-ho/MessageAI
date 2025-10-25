@@ -57,22 +57,27 @@ TASK 2 - SLANG DETECTION:
 Check if the message contains any slang or informal language. Here are some common slang terms for reference:
 ${slangList}
 
-Even if the slang isn't in the list, detect it if it's informal or trendy language.
+Even if the slang isn't in the list, detect it if it's informal or trendy language (like "rizz", "bussin", "no cap", "fr", "slay", etc.).
 
 RESPOND IN THIS EXACT JSON FORMAT:
 {
   "translation": "your translation in ${targetLang}",
   "slang": [
     {
-      "phrase": "the slang phrase",
-      "actualMeaning": "what it means in simple terms",
-      "explanation": "cultural context or origin (in ${targetLang})",
-      "literalMeaning": "literal translation if applicable"
+      "phrase": "the slang phrase in original language",
+      "actualMeaning": "what it means in simple ${targetLang}",
+      "explanation": "cultural context or origin explained in ${targetLang}",
+      "literalMeaning": "literal word-for-word translation in ${targetLang} if applicable, or empty string"
     }
   ]
 }
 
-If no slang detected, return: {"translation": "...", "slang": []}
+IMPORTANT:
+- "actualMeaning" MUST be in ${targetLang} and NEVER be empty or undefined
+- For "rizz": actualMeaning should be "Sức quyến rũ" (Vietnamese) or "Carisma" (Spanish)
+- All fields except literalMeaning are REQUIRED
+- If no slang detected, return: {"translation": "...", "slang": []}
+
 ONLY return valid JSON, nothing else.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
