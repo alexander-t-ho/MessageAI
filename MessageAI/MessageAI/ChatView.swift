@@ -118,6 +118,7 @@ struct ChatView: View {
                                 conversation: conversation, // Pass conversation for group chat features
                                 lastReadMessageId: lastReadOutgoingId,
                                 refreshKey: refreshTick,
+                                messageBubbleColor: preferences.messageBubbleColor,
                                 onReply: { replyToMessage(message) },
                                 onDelete: { deleteMessage(message) },
                                 onEmphasize: { toggleEmphasis(message) },
@@ -1397,6 +1398,7 @@ struct MessageBubble: View {
     let conversation: ConversationData // Added to show sender names in group chats
     let lastReadMessageId: String?
     let refreshKey: Int
+    let messageBubbleColor: Color // Custom message color
     let onReply: () -> Void
     let onDelete: () -> Void
     let onEmphasize: () -> Void
@@ -1506,7 +1508,7 @@ struct MessageBubble: View {
                         Text(message.content)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(isFromCurrentUser ? preferences.messageBubbleColor : Color(.systemGray5))
+                            .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
                             .foregroundColor(isFromCurrentUser ? .white : .primary)
                             .cornerRadius(20)
                         
