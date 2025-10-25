@@ -290,8 +290,8 @@ struct MessageTranslationView: View {
     
     @ViewBuilder
     private var messageStatusIndicator: some View {
-        if let editVersion = message.editVersion, editVersion > 0 {
-            // Message has been edited
+        if message.isEdited {
+            // Message has been edited - could show edited indicator if needed
         } else if !message.readByUserNames.isEmpty {
             // Group chat read receipts
             HStack(spacing: -8) {

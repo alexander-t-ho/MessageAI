@@ -215,7 +215,7 @@ struct ProfileView: View {
             }
             .onAppear {
                 // Set auth token for AI service when profile loads
-                if let token = authViewModel.authToken {
+                if let token = UserDefaults.standard.string(forKey: "accessToken") {
                     AITranslationService.shared.setAuthToken(token)
                 }
             }
