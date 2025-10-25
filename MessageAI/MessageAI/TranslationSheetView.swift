@@ -394,11 +394,11 @@ struct TranslationSheetView: View {
     }
     
     private func startLoadingTimeout() {
-        loadingTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { [weak self] _ in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                if self.aiService.culturalHints[self.message.id] != nil {
-                    self.culturalHints = self.aiService.culturalHints[self.message.id] ?? []
+        let messageId = message.id
+        loadingTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { [aiService] _ in
+            DispatchQueue.main.async { [aiService] in
+                if aiService.culturalHints[messageId] != nil {
+                    self.culturalHints = aiService.culturalHints[messageId] ?? []
                     self.isLoading = false
                 } else {
                     self.isLoading = false
