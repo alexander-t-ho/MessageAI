@@ -40,7 +40,7 @@ struct TranslationResult: Codable {
     let replies: [SmartReply]?
 }
 
-struct CulturalHint: Codable {
+struct CulturalHint: Codable, Equatable {
     let phrase: String
     let explanation: String
     let literalMeaning: String
