@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ChatHeaderView: View {
     let conversation: ConversationData
-    let onlineUserIds: Set<String>
+    let userPresence: [String: Bool]
     let currentUserId: String
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -35,7 +35,7 @@ struct ChatHeaderView: View {
     
     private var isOnline: Bool {
         if let id = otherUserId {
-            return onlineUserIds.contains(id)
+            return userPresence[id] ?? false
         }
         return false
     }
@@ -161,7 +161,7 @@ struct ProfileIconWithCustomization: View {
     
     return ChatHeaderView(
         conversation: conv,
-        onlineUserIds: ["user2"],
+        userPresence: ["user2": true],
         currentUserId: "user1"
     )
 }
