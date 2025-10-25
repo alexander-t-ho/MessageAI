@@ -204,89 +204,127 @@ struct ConversationListView: View {
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            ZStack {
-                if activeConversations.isEmpty && !isSelectionMode {
-                    emptyStateView
-                } else {
-                    conversationListView
+            mainContent
+                .navigationTitle("Messages")
+                .navigationDestination(for: ConversationData.self) { convo in
+                    navigationDestination(for: convo)
                 }
-            }
-            .navigationTitle("Messages")
-            .navigationDestination(for: ConversationData.self) { convo in
-                // Ensure conversation still exists and is not deleted before navigating
-                if activeConversations.contains(where: { $0.id == convo.id }) && !convo.isDeleted {
-                    ChatView(conversation: convo)
-                } else {
-                    EmptyView()
+                .onChange(of: pendingConversationId) { _, newId in
+                    handlePendingConversation(newId)
                 }
-            }
-            .onChange(of: pendingConversationId) { _, newId in
-                if let convId = newId, let conv = conversations.first(where: { $0.id == convId }) {
-                    print("📱 Opening conversation from notification: \(conv.name)")
-                    navigationPath.append(conv)
-                    pendingConversationId = nil // Clear after handling
+                .toolbar {
+                    leadingToolbarItems
+                    trailingToolbarItems
                 }
-            }
-            .toolbar {
-                leadingToolbarItems
-                trailingToolbarItems
-            }
-            .sheet(isPresented: $showNewChat) {
-                NewConversationView(showingNewGroup: $showingNewGroup, selectedConversation: $selectedConversation)
-            }
-            .sheet(isPresented: $showingNewGroup) {
-                NewGroupChatView()
-                    .environmentObject(authViewModel)
-                    .environmentObject(webSocketService)
-            }
-            .onChange(of: webSocketService.receivedMessages.count) { oldValue, newValue in
-                guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
-                handleIncomingMessage(payload)
-            }
-            .onChange(of: webSocketService.groupCreatedEvents.count) { oldValue, newValue in
-                print("📥 groupCreatedEvents count changed: \(oldValue) → \(newValue)")
-                guard newValue > oldValue, let groupData = webSocketService.groupCreatedEvents.last else {
-                    print("⚠️ No new group event to handle")
-                    return
+                .sheet(isPresented: $showNewChat) {
+                    NewConversationView(showingNewGroup: $showingNewGroup, selectedConversation: $selectedConversation)
                 }
-                print("📥 Processing group creation event...")
-                handleGroupCreated(groupData)
-            }
-            .onChange(of: webSocketService.groupUpdateEvents.count) { oldValue, newValue in
-                guard newValue > oldValue, let updateData = webSocketService.groupUpdateEvents.last else { return }
-                handleGroupUpdate(updateData)
-            }
-            .onChange(of: webSocketService.connectionState) { _, state in
-                if case .connected = state {
-                    if syncService == nil {
-                        syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
-                    }
-                    Task { await syncService?.processQueueIfPossible() }
+                .sheet(isPresented: $showingNewGroup) {
+                    newGroupSheet
                 }
-            }
-            .onChange(of: totalUnreadCount) { oldValue, newValue in
-                // Update app icon badge count when unread messages change
-                print("🔔 Total unread count changed: \(oldValue) → \(newValue)")
-                NotificationManager.shared.setBadgeCount(newValue)
-            }
-            .onAppear {
-                if syncService == nil {
-                    syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+                .onChange(of: webSocketService.receivedMessages.count) { oldValue, newValue in
+                    handleNewMessage(oldValue, newValue)
                 }
-                Task { await syncService?.processQueueIfPossible() }
-                
-                // Update badge count to reflect current state
-                NotificationManager.shared.setBadgeCount(totalUnreadCount)
-                
-                // If all conversations are read, clear notifications
-                if totalUnreadCount == 0 {
-                    NotificationManager.shared.clearAllNotifications()
+                .onChange(of: webSocketService.groupCreatedEvents.count) { oldValue, newValue in
+                    handleGroupCreatedEvent(oldValue, newValue)
                 }
-                
-                // Clean up any duplicate direct message conversations that should be groups
-                cleanupDuplicateConversations()
+                .onChange(of: webSocketService.groupUpdateEvents.count) { oldValue, newValue in
+                    handleGroupUpdated(oldValue, newValue)
+                }
+                .onChange(of: webSocketService.connectionState) { _, state in
+                    handleConnectionStateChange(state)
+                }
+                .onChange(of: totalUnreadCount) { oldValue, newValue in
+                    handleUnreadCountChange(oldValue, newValue)
+                }
+                .onAppear {
+                    onViewAppear()
+                }
+        }
+    }
+    
+    @ViewBuilder
+    private var mainContent: some View {
+        ZStack {
+            if activeConversations.isEmpty && !isSelectionMode {
+                emptyStateView
+            } else {
+                conversationListView
             }
         }
+    }
+    
+    @ViewBuilder
+    private func navigationDestination(for convo: ConversationData) -> some View {
+        if activeConversations.contains(where: { $0.id == convo.id }) && !convo.isDeleted {
+            ChatView(conversation: convo)
+        } else {
+            EmptyView()
+        }
+    }
+    
+    @ViewBuilder
+    private var newGroupSheet: some View {
+        NewGroupChatView()
+            .environmentObject(authViewModel)
+            .environmentObject(webSocketService)
+    }
+    
+    private func handlePendingConversation(_ newId: String?) {
+        if let convId = newId, let conv = conversations.first(where: { $0.id == convId }) {
+            print("📱 Opening conversation from notification: \(conv.groupName ?? "Chat")")
+            navigationPath.append(conv)
+            pendingConversationId = nil
+        }
+    }
+    
+    private func handleNewMessage(_ oldValue: Int, _ newValue: Int) {
+        guard newValue > oldValue, let payload = webSocketService.receivedMessages.last else { return }
+        handleIncomingMessage(payload)
+    }
+    
+    private func handleGroupCreatedEvent(_ oldValue: Int, _ newValue: Int) {
+        print("📥 groupCreatedEvents count changed: \(oldValue) → \(newValue)")
+        guard newValue > oldValue, let groupData = webSocketService.groupCreatedEvents.last else {
+            print("⚠️ No new group event to handle")
+            return
+        }
+        print("📥 Processing group creation event...")
+        handleGroupCreated(groupData)
+    }
+    
+    private func handleGroupUpdated(_ oldValue: Int, _ newValue: Int) {
+        guard newValue > oldValue, let updateData = webSocketService.groupUpdateEvents.last else { return }
+        handleGroupUpdate(updateData)
+    }
+    
+    private func handleConnectionStateChange(_ state: WebSocketService.ConnectionState) {
+        if case .connected = state {
+            if syncService == nil {
+                syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+            }
+            Task { await syncService?.processQueueIfPossible() }
+        }
+    }
+    
+    private func handleUnreadCountChange(_ oldValue: Int, _ newValue: Int) {
+        print("🔔 Total unread count changed: \(oldValue) → \(newValue)")
+        NotificationManager.shared.setBadgeCount(newValue)
+    }
+    
+    private func onViewAppear() {
+        if syncService == nil {
+            syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
+        }
+        Task { await syncService?.processQueueIfPossible() }
+        
+        NotificationManager.shared.setBadgeCount(totalUnreadCount)
+        
+        if totalUnreadCount == 0 {
+            NotificationManager.shared.clearAllNotifications()
+        }
+        
+        cleanupDuplicateConversations()
     }
     
     private func cleanupDuplicateConversations() {

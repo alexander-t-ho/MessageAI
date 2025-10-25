@@ -238,7 +238,7 @@ class AITranslationService: ObservableObject {
         // Build conversation context (last 5 messages)
         let recentMessages = Array(conversation.suffix(limit))
         let context = recentMessages.map { msg in
-            "\(msg.senderName ?? "User"): \(msg.content)"
+            "\(msg.senderName): \(msg.content)"
         }.joined(separator: "\n")
         
         do {

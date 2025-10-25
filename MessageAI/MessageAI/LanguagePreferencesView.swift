@@ -368,7 +368,7 @@ struct SmartReplySettingsView: View {
         List {
             Section {
                 Toggle("Enable Smart Replies", isOn: $smartRepliesEnabled)
-                    .onChange(of: smartRepliesEnabled) { newValue in
+                    .onChange(of: smartRepliesEnabled) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "smartRepliesEnabled")
                     }
                 
@@ -378,7 +378,7 @@ struct SmartReplySettingsView: View {
                         Text("5 replies").tag(5)
                         Text("7 replies").tag(7)
                     }
-                    .onChange(of: replyCount) { newValue in
+                    .onChange(of: replyCount) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "smartReplyCount")
                     }
                 }
@@ -390,12 +390,12 @@ struct SmartReplySettingsView: View {
             
             Section {
                 Toggle("Learn from My Style", isOn: $learnFromStyle)
-                    .onChange(of: learnFromStyle) { newValue in
+                    .onChange(of: learnFromStyle) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "learnFromStyle")
                     }
                 
                 Toggle("Include Tone Indicators", isOn: $includeTone)
-                    .onChange(of: includeTone) { newValue in
+                    .onChange(of: includeTone) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "includeTone")
                     }
             } header: {
@@ -420,18 +420,18 @@ struct LanguageLearningView: View {
         List {
             Section {
                 Toggle("Enable Learning Mode", isOn: $learningModeEnabled)
-                    .onChange(of: learningModeEnabled) { newValue in
+                    .onChange(of: learningModeEnabled) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "learningModeEnabled")
                     }
                 
                 if learningModeEnabled {
                     Toggle("Show Pronunciation Guide", isOn: $showPronunciation)
-                        .onChange(of: showPronunciation) { newValue in
+                        .onChange(of: showPronunciation) { _, newValue in
                             UserDefaults.standard.set(newValue, forKey: "showPronunciation")
                         }
                     
                     Toggle("Show Grammar Notes", isOn: $showGrammarNotes)
-                        .onChange(of: showGrammarNotes) { newValue in
+                        .onChange(of: showGrammarNotes) { _, newValue in
                             UserDefaults.standard.set(newValue, forKey: "showGrammarNotes")
                         }
                 }
