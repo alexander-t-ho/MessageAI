@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - AI Translation Models
 
@@ -244,7 +245,7 @@ class AITranslationService: ObservableObject {
         }
     }
     
-    func generateSmartReplies(for conversation: [Message], limit: Int = 5) async {
+    func generateSmartReplies(for conversation: [MessageData], limit: Int = 5) async {
         // Build conversation context (last 5 messages)
         let recentMessages = Array(conversation.suffix(limit))
         let context = recentMessages.map { msg in
