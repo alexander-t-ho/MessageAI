@@ -13,17 +13,27 @@ Implement a RAG (Retrieval-Augmented Generation) pipeline that:
 ## 🏗️ **Architecture**
 
 ```
-User Message → WebSocket → Lambda (RAG) → Vector DB → Retrieve Slang
+User Message → WebSocket → Lambda (RAG) → LangChain → Pinecone + Claude
                     ↓
-            Claude + Context → Explanation → Cache → User
+            LangSmith (monitoring) → Explanation → Cache → User
 ```
 
-### **Components:**
-1. **Vector Database** - Store slang embeddings (Pinecone/OpenSearch)
-2. **Slang Ingestion Pipeline** - Auto-update from sources
-3. **RAG Lambda** - Query vector DB + Claude
-4. **WebSocket Handler** - Real-time communication
-5. **LangChain** - Orchestrate RAG workflow
+### **Complete Stack (All Work Together):**
+1. **Pinecone** - Vector database for slang embeddings
+2. **LangChain** - Orchestrates RAG workflow (RECOMMENDED!)
+3. **LangSmith** - Monitors and debugs (optional but helpful)
+4. **Claude 3.5 Sonnet** - Generates explanations
+5. **OpenAI Embeddings** - Converts text to vectors
+6. **WebSocket Handler** - Real-time communication
+
+### **Why This Stack:**
+- ✅ **Pinecone is NOT a LangChain alternative** - It's a database!
+- ✅ **LangChain simplifies RAG** - 90% less code
+- ✅ **LangSmith helps debug** - See exactly what's happening
+- ✅ **All free tiers available** - $0 to start
+- ✅ **Production-ready** - Used by thousands of companies
+
+See `RAG_STACK_EXPLAINED.md` for detailed comparison.
 
 ---
 
