@@ -145,6 +145,10 @@ class NotificationManager: NSObject, ObservableObject {
         content.badge = NSNumber(value: badge)
         content.userInfo = ["conversationId": conversationId]
         
+        // Group notifications by conversation for better UX
+        content.threadIdentifier = conversationId
+        content.categoryIdentifier = "MESSAGE_CATEGORY"
+        
         // Use a unique identifier for each notification
         let identifier = UUID().uuidString
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
@@ -156,6 +160,27 @@ class NotificationManager: NSObject, ObservableObject {
                 print("✅ Local notification shown: \(title) - \(body)")
             }
         }
+    }
+    
+    // Clear notifications for a specific conversation
+    func clearNotifications(for conversationId: String) {
+        UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+            let identifiersToRemove = notifications
+                .filter { ($0.request.content.userInfo["conversationId"] as? String) == conversationId }
+                .map { $0.request.identifier }
+            
+            if !identifiersToRemove.isEmpty {
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiersToRemove)
+                print("🗑️ Cleared \(identifiersToRemove.count) notifications for conversation \(conversationId)")
+            }
+        }
+    }
+    
+    // Clear all notifications
+    func clearAllNotifications() {
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        clearBadgeCount()
+        print("🗑️ Cleared all notifications and badge")
     }
 }
 

@@ -270,6 +270,9 @@ struct ChatView: View {
                     UserDefaults.standard.set(conversation.id, forKey: "currentConversationId")
                     print("📍 Set currentConversationId for notification suppression")
                     
+                    // Clear notifications for this conversation
+                    NotificationManager.shared.clearNotifications(for: conversation.id)
+                    
                     // Initialize visible messages from query
                     visibleMessages = queriedMessages
                     print("📊 Loaded \(visibleMessages.count) messages")

@@ -260,8 +260,13 @@ struct ConversationListView: View {
                 }
                 Task { await syncService?.processQueueIfPossible() }
                 
-                // Set initial badge count
+                // Update badge count to reflect current state
                 NotificationManager.shared.setBadgeCount(totalUnreadCount)
+                
+                // If all conversations are read, clear notifications
+                if totalUnreadCount == 0 {
+                    NotificationManager.shared.clearAllNotifications()
+                }
                 
                 // Clean up any duplicate direct message conversations that should be groups
                 cleanupDuplicateConversations()
@@ -384,11 +389,25 @@ extension ConversationListView {
         let newBadgeCount = currentUnreadCount + 1
         
         // Show local notification banner for incoming message
-        // This simulates a push notification banner
-        let conversationName = payload.conversationName ?? payload.senderName
+        // Format: "SenderName in GroupName" or just "SenderName" for 1-on-1
+        let title: String
+        if let convName = payload.conversationName, !convName.isEmpty {
+            // Group chat: "SenderName in GroupName"
+            title = "\(payload.senderName) in \(convName)"
+        } else {
+            // 1-on-1 chat: Just sender name
+            title = payload.senderName
+        }
+        
+        // Truncate long messages for notification preview
+        let maxLength = 100
+        let notificationBody = payload.content.count > maxLength 
+            ? String(payload.content.prefix(maxLength)) + "..."
+            : payload.content
+        
         NotificationManager.shared.showLocalNotification(
-            title: conversationName,
-            body: payload.content,
+            title: title,
+            body: notificationBody,
             conversationId: payload.conversationId,
             badge: newBadgeCount
         )
