@@ -55,9 +55,35 @@ async function retrieveRelevantSlang(message) {
   return relevantSlang;
 }
 
-// Generate explanation with OpenAI
-async function generateExplanation(message, relevantSlang, openaiApiKey) {
-  console.log('[RAG-Simple] Generating explanation with OpenAI GPT-4...');
+// Generate explanation with OpenAI (in user's preferred language)
+async function generateExplanation(message, relevantSlang, openaiApiKey, targetLang = 'en') {
+  console.log(`[RAG-Simple] Generating explanation with OpenAI GPT-4 in ${targetLang}...`);
+  
+  // Language names for the prompt
+  const languageNames = {
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'it': 'Italian',
+    'pt': 'Portuguese',
+    'ru': 'Russian',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'zh': 'Chinese',
+    'ar': 'Arabic',
+    'hi': 'Hindi',
+    'nl': 'Dutch',
+    'sv': 'Swedish',
+    'pl': 'Polish',
+    'tr': 'Turkish',
+    'vi': 'Vietnamese',
+    'th': 'Thai',
+    'id': 'Indonesian',
+    'he': 'Hebrew'
+  };
+  
+  const targetLanguageName = languageNames[targetLang] || 'English';
   
   // Build context from retrieved slang
   let context = '';
@@ -77,17 +103,22 @@ Analyze this message for slang, idioms, or Gen Z expressions that an older reade
 
 "${message}"
 
-For EACH slang term or youth expression found, provide a clear explanation.
+For EACH slang term or youth expression found, provide a clear explanation **in ${targetLanguageName}**.
+
+IMPORTANT: 
+- Keep the original English slang term in the "phrase" field (don't translate it)
+- Write the explanation, literalMeaning, and actualMeaning fields in ${targetLanguageName}
+- Make explanations clear and easy to understand
 
 Return ONLY a JSON object with this exact format:
 {
   "hasContext": true/false,
   "hints": [
     {
-      "phrase": "exact term from message",
-      "explanation": "who uses this (e.g., 'Gen Z slang for...', 'Internet abbreviation meaning...')",
-      "literalMeaning": "literal translation if applicable, otherwise empty string",
-      "actualMeaning": "what it actually means in simple terms"
+      "phrase": "exact English term from message",
+      "explanation": "explanation in ${targetLanguageName} (e.g., 'Jerga de la Generación Z para...' if Spanish)",
+      "literalMeaning": "literal translation in ${targetLanguageName} if applicable, otherwise empty string",
+      "actualMeaning": "what it actually means in ${targetLanguageName}"
     }
   ]
 }
@@ -162,7 +193,7 @@ exports.handler = async (event) => {
   
   try {
     const body = JSON.parse(event.body);
-    const { message } = body;
+    const { message, targetLang = 'en' } = body;
     
     if (!message) {
       return {
@@ -172,8 +203,11 @@ exports.handler = async (event) => {
       };
     }
     
-    // Check cache first
-    const cached = await checkCache(message);
+    console.log(`[RAG-Simple] Target language: ${targetLang}`);
+    
+    // Check cache first (cache key includes language)
+    const cacheKey = `${targetLang}:${message}`;
+    const cached = await checkCache(cacheKey);
     if (cached) {
       return {
         statusCode: 200,
@@ -192,8 +226,8 @@ exports.handler = async (event) => {
     // Step 1: Retrieve relevant slang from DynamoDB
     const relevantSlang = await retrieveRelevantSlang(message);
     
-    // Step 2: Generate explanation with OpenAI GPT-4
-    const explanation = await generateExplanation(message, relevantSlang, openaiApiKey);
+    // Step 2: Generate explanation with OpenAI GPT-4 in target language
+    const explanation = await generateExplanation(message, relevantSlang, openaiApiKey, targetLang);
     
     // Cache the result
     await storeCache(message, explanation);

@@ -223,6 +223,7 @@ class AITranslationService: ObservableObject {
             
             if let hints = result?.hints {
                 culturalHints[messageId] = hints
+                print("🎯 Got cultural hints for \(messageId) in \(targetLang.displayName): \(hints.count) terms")
             }
         } catch {
             print("Cultural context error: \(error)")

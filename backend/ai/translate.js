@@ -149,7 +149,7 @@ Text to translate: "${text}"`;
   }
 }
 
-// Get cultural context hints and slang explanations
+// Get cultural context hints and slang explanations (in target language)
 async function getCulturalContext(text, sourceLang, targetLang, apiKey) {
   const cacheKey = generateCacheKey(text, `${sourceLang}-${targetLang}`, 'cultural');
   
@@ -157,6 +157,14 @@ async function getCulturalContext(text, sourceLang, targetLang, apiKey) {
   if (cached) {
     return cached.culturalHints;
   }
+
+  // Language names for better prompt
+  const languageNames = {
+    'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+    'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'ja': 'Japanese',
+    'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi'
+  };
+  const targetLangName = languageNames[targetLang] || 'English';
 
   const prompt = `Analyze this text for slang, idioms, cultural references, or Gen Z/youth expressions that an older reader might not understand.
 
@@ -167,17 +175,22 @@ Focus on:
 - Idioms that don't translate literally
 - Regional or generational expressions
 
-For EACH slang term or expression found, explain it clearly.
+For EACH slang term or expression found, explain it clearly **in ${targetLangName}**.
+
+IMPORTANT:
+- Keep the original slang term in the "phrase" field (don't translate the term itself)
+- Write the explanation, literalMeaning, and actualMeaning in ${targetLangName}
+- Make it easy for a ${targetLangName} speaker to understand
 
 Return ONLY a JSON object with this format:
 {
   "hasContext": true/false,
   "hints": [
     {
-      "phrase": "the exact slang term or phrase from the message",
-      "explanation": "who uses this (e.g., 'Gen Z slang for...', 'Internet slang meaning...')",
-      "literalMeaning": "what it literally means (if applicable, otherwise leave empty)",
-      "actualMeaning": "what it actually means in simple terms"
+      "phrase": "the exact slang term from the message (in original language)",
+      "explanation": "explanation in ${targetLangName} (e.g., 'Jerga de la Generación Z que significa...' if Spanish)",
+      "literalMeaning": "literal meaning in ${targetLangName} if applicable, otherwise empty",
+      "actualMeaning": "what it actually means in ${targetLangName}"
     }
   ]
 }
