@@ -92,7 +92,7 @@ struct ChatHeaderView: View {
             } else {
                 // Group chat header
                 VStack(spacing: 2) {
-                    Text(conversation.name)
+                    Text(conversation.groupName ?? "Group Chat")
                         .font(.headline)
                         .lineLimit(1)
                     
@@ -152,14 +152,15 @@ struct ProfileIconWithCustomization: View {
 }
 
 #Preview {
-    ChatHeaderView(
-        conversation: ConversationData(
-            id: "test",
-            participantIds: ["user1", "user2"],
-            participantNames: ["Current User", "Other User"],
-            name: "Other User",
-            isGroupChat: false
-        ),
+    let conv = ConversationData(
+        id: "test",
+        participantIds: ["user1", "user2"],
+        participantNames: ["Current User", "Other User"],
+        isGroupChat: false
+    )
+    
+    return ChatHeaderView(
+        conversation: conv,
         onlineUserIds: ["user2"],
         currentUserId: "user1"
     )
