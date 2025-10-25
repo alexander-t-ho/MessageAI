@@ -122,7 +122,22 @@ struct ChatView: View {
                                 onEmphasize: { toggleEmphasis(message) },
                                 onForward: { forwardMessage(message) },
                                 onEdit: { editMessage(message) },
-                                onTapReply: { scrollToMessage($0, proxy: proxy) }
+                                onTapReply: { scrollToMessage($0, proxy: proxy) },
+                                onTranslate: {
+                                    messageToTranslate = message
+                                    translationType = .translate
+                                    showTranslationSheet = true
+                                },
+                                onExplainSlang: {
+                                    messageToTranslate = message
+                                    translationType = .explainSlang
+                                    showTranslationSheet = true
+                                },
+                                onTranslateAndExplain: {
+                                    messageToTranslate = message
+                                    translationType = .both
+                                    showTranslationSheet = true
+                                }
                             )
                             .id(message.id)
                         }
@@ -1364,6 +1379,9 @@ struct MessageBubble: View {
     let onForward: () -> Void
     let onEdit: () -> Void
     let onTapReply: (String) -> Void
+    let onTranslate: () -> Void
+    let onExplainSlang: () -> Void
+    let onTranslateAndExplain: () -> Void
     
     @State private var swipeOffset: CGFloat = 0
     @State private var showTimestamp: Bool = false
@@ -1598,27 +1616,15 @@ struct MessageBubble: View {
                 .contextMenu {
                     // AI Understanding options - only for incoming messages
                     if !isFromCurrentUser && !message.isDeleted {
-                        Button(action: { 
-                            messageToTranslate = message
-                            translationType = .translate
-                            showTranslationSheet = true
-                        }) {
+                        Button(action: onTranslate) {
                             Label("Translate", systemImage: "globe")
                         }
                         
-                        Button(action: { 
-                            messageToTranslate = message
-                            translationType = .explainSlang
-                            showTranslationSheet = true
-                        }) {
+                        Button(action: onExplainSlang) {
                             Label("Explain Slang", systemImage: "lightbulb.fill")
                         }
                         
-                        Button(action: { 
-                            messageToTranslate = message
-                            translationType = .both
-                            showTranslationSheet = true
-                        }) {
+                        Button(action: onTranslateAndExplain) {
                             Label("Translate & Explain", systemImage: "sparkles")
                         }
                         
