@@ -9,6 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct ConversationListView: View {
+    @Binding var pendingConversationId: String? // For notification deep linking
+    
     @Environment(\.modelContext) private var modelContext
     @Query(
         filter: #Predicate<ConversationData> { conversation in
@@ -20,6 +22,7 @@ struct ConversationListView: View {
     @State private var showNewChat = false
     @State private var showingNewGroup = false
     @State private var selectedConversation: ConversationData?
+    @State private var navigationPath = NavigationPath() // For programmatic navigation
     @EnvironmentObject var webSocketService: WebSocketService
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var networkToggle: Bool = false
@@ -28,6 +31,11 @@ struct ConversationListView: View {
     @State private var refreshID = UUID() // Force refresh after deletion
     @State private var isSelectionMode = false // Multi-select mode
     @State private var selectedConversations = Set<String>() // Selected conversation IDs
+    
+    // Default initializer for when called without pending conversation
+    init(pendingConversationId: Binding<String?>? = nil) {
+        _pendingConversationId = pendingConversationId ?? .constant(nil)
+    }
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -195,7 +203,7 @@ struct ConversationListView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 if activeConversations.isEmpty && !isSelectionMode {
                     emptyStateView
@@ -210,6 +218,13 @@ struct ConversationListView: View {
                     ChatView(conversation: convo)
                 } else {
                     EmptyView()
+                }
+            }
+            .onChange(of: pendingConversationId) { _, newId in
+                if let convId = newId, let conv = conversations.first(where: { $0.id == convId }) {
+                    print("📱 Opening conversation from notification: \(conv.name)")
+                    navigationPath.append(conv)
+                    pendingConversationId = nil // Clear after handling
                 }
             }
             .toolbar {

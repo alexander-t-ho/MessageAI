@@ -11,11 +11,12 @@ struct HomeView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var preferences = UserPreferences.shared
     @State private var selectedTab = 0
+    @State private var pendingConversationId: String?
     
     var body: some View {
         TabView(selection: $selectedTab) {
             // Messages Tab
-            ConversationListView()
+            ConversationListView(pendingConversationId: $pendingConversationId)
                 .tabItem {
                     Image(systemName: "bubble.left.and.bubble.right.fill")
                     Text("Messages")
@@ -31,6 +32,15 @@ struct HomeView: View {
                 .tag(1)
         }
         .preferredColorScheme(preferences.preferredColorScheme)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenConversation"))) { notification in
+            if let conversationId = notification.userInfo?["conversationId"] as? String {
+                print("📱 Opening conversation from notification: \(conversationId)")
+                // Switch to messages tab
+                selectedTab = 0
+                // Pass conversation ID to ConversationListView
+                pendingConversationId = conversationId
+            }
+        }
     }
 }
 
