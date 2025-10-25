@@ -19,13 +19,15 @@ final class SyncService: ObservableObject {
         self.modelContext = modelContext
     }
     
-    func enqueue(message: MessageData, recipientId: String) {
+    func enqueue(message: MessageData, recipientId: String, recipientIds: [String] = [], isGroupChat: Bool = false) {
         let pending = PendingMessageData(
             messageId: message.id,
             conversationId: message.conversationId,
             senderId: message.senderId,
             senderName: message.senderName,
             recipientId: recipientId,
+            recipientIds: recipientIds,
+            isGroupChat: isGroupChat,
             content: message.content,
             timestamp: message.timestamp
         )
@@ -50,6 +52,8 @@ final class SyncService: ObservableObject {
                 senderId: item.senderId,
                 senderName: item.senderName,
                 recipientId: item.recipientId,
+                recipientIds: item.isGroupChat ? item.recipientIds : [item.recipientId],
+                isGroupChat: item.isGroupChat,
                 content: item.content,
                 timestamp: item.timestamp
             )

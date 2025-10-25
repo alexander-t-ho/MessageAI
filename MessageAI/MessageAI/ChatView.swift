@@ -15,6 +15,7 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var webSocketService: WebSocketService
+    @StateObject private var aiService = AITranslationService.shared
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @Query private var pendingAll: [PendingMessageData]
@@ -25,6 +26,9 @@ struct ChatView: View {
     @State private var showForwardSheet = false
     @State private var messageToForward: MessageData?
     @State private var messageToEdit: MessageData?
+    @State private var showTranslationSheet = false
+    @State private var messageToTranslate: MessageData?
+    @State private var translationType: TranslationSheetView.TranslationType = .translate
     @State private var visibleMessages: [MessageData] = [] // Manually managed visible messages
     @FocusState private var isInputFocused: Bool
     @State private var isAtBottom: Bool = false // true when user is viewing the latest message
@@ -38,6 +42,28 @@ struct ChatView: View {
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
+    }
+    
+    // Calculate unread message count from other conversations
+    private var totalUnreadCount: Int {
+        // Only count from non-deleted conversations
+        let otherConversations = allConversations.filter { 
+            $0.id != conversation.id && !$0.isDeleted 
+        }
+        var unreadCount = 0
+        
+        for conv in otherConversations {
+            // Only count non-deleted, unread messages from others
+            let unreadMessages = allMessages.filter { message in
+                message.conversationId == conv.id &&
+                message.senderId != currentUserId &&
+                !message.isRead &&
+                !message.isDeleted
+            }
+            unreadCount += unreadMessages.count
+        }
+        
+        return unreadCount
     }
     
     // Treat connected WebSocket as online-effective for UI/queue decisions on phase-5
@@ -96,7 +122,22 @@ struct ChatView: View {
                                 onEmphasize: { toggleEmphasis(message) },
                                 onForward: { forwardMessage(message) },
                                 onEdit: { editMessage(message) },
-                                onTapReply: { scrollToMessage($0, proxy: proxy) }
+                                onTapReply: { scrollToMessage($0, proxy: proxy) },
+                                onTranslate: {
+                                    messageToTranslate = message
+                                    translationType = .translate
+                                    showTranslationSheet = true
+                                },
+                                onExplainSlang: {
+                                    messageToTranslate = message
+                                    translationType = .explainSlang
+                                    showTranslationSheet = true
+                                },
+                                onTranslateAndExplain: {
+                                    messageToTranslate = message
+                                    translationType = .both
+                                    showTranslationSheet = true
+                                }
                             )
                             .id(message.id)
                         }
@@ -315,6 +356,17 @@ struct ChatView: View {
                 .background(Color(.systemGray6))
             }
             
+            // Smart Reply View - AI-powered quick replies
+            if visibleMessages.count > 2 {
+                SmartReplyView(
+                    messageText: $messageText,
+                    conversation: conversation,
+                    messages: visibleMessages
+                )
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+            }
+            
             // Input bar
             HStack(spacing: 12) {
                 TextField("Message", text: $messageText, axis: .vertical)
@@ -374,13 +426,77 @@ struct ChatView: View {
             .padding(.vertical, 8)
             .background(Color(.systemBackground))
         }
+        .onAppear {
+            // Initialize AI Translation Service with auth token
+            if let token = UserDefaults.standard.string(forKey: "accessToken") {
+                aiService.setAuthToken(token)
+                print("🌍 AI Translation Service initialized")
+            }
+            
+            // Set currently viewed conversation
+            webSocketService.currentlyViewedConversationId = conversation.id
+            print("👁️ Now viewing conversation: \(conversation.id)")
+            
+            // Reset unread count for this conversation
+            conversation.unreadCount = 0
+            do {
+                try modelContext.save()
+                
+                // Immediately update badge count
+                // Calculate total unread across all conversations
+                let descriptor = FetchDescriptor<ConversationData>(
+                    predicate: #Predicate { $0.isDeleted == false }
+                )
+                if let allConversations = try? modelContext.fetch(descriptor) {
+                    let totalUnread = allConversations.reduce(0) { $0 + $1.unreadCount }
+                    NotificationManager.shared.setBadgeCount(totalUnread)
+                    print("🔔 Badge updated on chat open: \(totalUnread)")
+                }
+            } catch {
+                print("❌ Error resetting unread count: \(error)")
+            }
+        }
         .onDisappear {
+            // Clear currently viewed conversation
+            webSocketService.currentlyViewedConversationId = nil
+            print("👁️ Left conversation")
+            
             // Clean up typing indicator when leaving chat
             sendTypingIndicator(isTyping: false)
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true) // Hide default back button
         .toolbar {
+            // Custom back button with unread count badge
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    dismiss()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.blue)
+                        
+                        Text("Back")
+                            .foregroundColor(.blue)
+                        
+                        // Show unread count badge if there are unread messages
+                        if totalUnreadCount > 0 {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 20, height: 20)
+                                
+                                Text("\(totalUnreadCount > 99 ? "99+" : "\(totalUnreadCount)")")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                }
+            }
+            
             ToolbarItem(placement: .principal) {
                 Button(action: {
                     if conversation.isGroupChat {
@@ -439,6 +555,14 @@ struct ChatView: View {
                 GroupDetailsView(conversation: conversation)
                     .environmentObject(authViewModel)
                     .environmentObject(webSocketService)
+            }
+        }
+        .sheet(isPresented: $showTranslationSheet) {
+            if let message = messageToTranslate {
+                TranslationSheetView(
+                    message: message,
+                    translationType: translationType
+                )
             }
         }
         .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
@@ -638,7 +762,12 @@ struct ChatView: View {
                 if !isOnlineEffective || !isConnected {
                 // Enqueue for later send
                 let sync = SyncService(webSocket: webSocketService, modelContext: modelContext)
-                sync.enqueue(message: message, recipientId: recipientId)
+                sync.enqueue(
+                    message: message, 
+                    recipientId: recipientId,
+                    recipientIds: conversation.participantIds,
+                    isGroupChat: conversation.isGroupChat
+                )
                 Task { await sync.processQueueIfPossible() }
             } else {
                 print("🚀🚀🚀 SENDING MESSAGE VIA WEBSOCKET:")
@@ -1250,6 +1379,9 @@ struct MessageBubble: View {
     let onForward: () -> Void
     let onEdit: () -> Void
     let onTapReply: (String) -> Void
+    let onTranslate: () -> Void
+    let onExplainSlang: () -> Void
+    let onTranslateAndExplain: () -> Void
     
     @State private var swipeOffset: CGFloat = 0
     @State private var showTimestamp: Bool = false
@@ -1482,6 +1614,15 @@ struct MessageBubble: View {
                 )
                 .animation(.easeInOut(duration: 0.2), value: swipeOffset)
                 .contextMenu {
+                    // AI Understanding options - only for incoming messages
+                    if !isFromCurrentUser && !message.isDeleted {
+                        Button(action: onTranslateAndExplain) {
+                            Label("Translate & Explain", systemImage: "sparkles")
+                        }
+                        
+                        Divider()
+                    }
+                    
                     // Edit option - only for sender's own messages
                     if isFromCurrentUser && !message.isDeleted {
                         Button(action: onEdit) {

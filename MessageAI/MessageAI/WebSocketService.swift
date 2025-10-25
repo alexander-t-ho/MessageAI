@@ -46,6 +46,7 @@ struct MessagePayload: Codable {
     let content: String
     let timestamp: String
     let status: String
+    let conversationName: String? // Group chat name or nil for direct messages
     let replyToMessageId: String?
     let replyToContent: String?
     let replyToSenderName: String?
@@ -95,6 +96,7 @@ class WebSocketService: ObservableObject {
     @Published var catchUpCounter: Int = 0 // increments when catch-up completes
     @Published var typingUsers: [String: String] = [:] // conversationId -> userName who is typing
     private var typingTimers: [String: Timer] = [:] // conversationId -> timer for clearing typing status
+    @Published var currentlyViewedConversationId: String? = nil // Track which conversation user is viewing
     
     // Group chat events
     @Published var groupCreatedEvents: [[String: Any]] = []
@@ -198,7 +200,7 @@ class WebSocketService: ObservableObject {
             "conversationId": conversationId,
             "senderId": senderId,
             "senderName": senderName,
-            "recipientId": recipientId,
+            "recipientId": recipientId,  // Always include for compatibility
             "content": content,
             "timestamp": ISO8601DateFormatter().string(from: timestamp),
             "replyToMessageId": replyToMessageId as Any,
@@ -276,6 +278,36 @@ class WebSocketService: ObservableObject {
             }
         } catch {
             print("❌ Error serializing delete: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Send device token for push notifications
+    func sendDeviceToken(userId: String, token: String) {
+        guard connectionState == .connected else {
+            print("❌ Cannot send device token - not connected")
+            return
+        }
+        
+        let payload: [String: Any] = [
+            "action": "registerDevice",
+            "userId": userId,
+            "deviceToken": token,
+            "platform": "ios"
+        ]
+        
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            guard let json = String(data: data, encoding: .utf8) else { return }
+            let message = URLSessionWebSocketTask.Message.string(json)
+            webSocketTask?.send(message) { error in
+                if let error = error {
+                    print("❌ Error sending device token: \(error)")
+                } else {
+                    print("✅ Device token sent to backend")
+                }
+            }
+        } catch {
+            print("❌ Error serializing device token payload: \(error)")
         }
     }
     
@@ -721,6 +753,98 @@ class WebSocketService: ObservableObject {
                 print("👥 Group member left notification received")
                 groupMemberLeftEvents.append(memberData)
             }
+        } else if let type = json["type"] as? String, type == "translate_and_explain",
+                  let messageId = json["messageId"] as? String {
+            // Handle combined translation and slang explanation response
+            Task { @MainActor in
+                print("🚨🚨🚨 TRANSLATE & EXPLAIN RESPONSE RECEIVED 🚨🚨🚨")
+                print("   MessageID: \(messageId)")
+                
+                // Handle translation
+                if let translationData = json["translation"] as? [String: Any],
+                   let translatedText = translationData["translatedText"] as? String {
+                    print("   ✅ Translation received: \(translatedText)")
+                    
+                    let translationResult = TranslationResult(
+                        translatedText: translatedText,
+                        detectedLanguage: translationData["sourceLanguage"] as? String,
+                        confidence: nil,
+                        fromCache: false,
+                        hasContext: nil,
+                        hints: nil,
+                        adjustedText: nil,
+                        originalLevel: nil,
+                        changes: nil,
+                        replies: nil
+                    )
+                    AITranslationService.shared.translations[messageId] = translationResult
+                } else {
+                    print("   ❌ No translation in response")
+                }
+                
+                // Handle slang explanation
+                if let slangData = json["slang"] as? [String: Any],
+                   let hasContext = slangData["hasContext"] as? Bool {
+                    
+                    if hasContext, let hintsData = slangData["hints"] as? [[String: Any]] {
+                        print("   Has slang context: YES, hints count: \(hintsData.count)")
+                        var hints: [CulturalHint] = []
+                        for hintDict in hintsData {
+                            if let phrase = hintDict["phrase"] as? String,
+                               let explanation = hintDict["explanation"] as? String,
+                               let actualMeaning = hintDict["actualMeaning"] as? String {
+                                let hint = CulturalHint(
+                                    phrase: phrase,
+                                    explanation: explanation,
+                                    literalMeaning: hintDict["literalMeaning"] as? String ?? "",
+                                    actualMeaning: actualMeaning
+                                )
+                                hints.append(hint)
+                                print("   ✅ Parsed slang hint: \(phrase)")
+                            }
+                        }
+                        AITranslationService.shared.culturalHints[messageId] = hints
+                        print("   💾 Stored \(hints.count) cultural hints")
+                    } else {
+                        print("   No slang detected")
+                        AITranslationService.shared.culturalHints[messageId] = []
+                    }
+                }
+            }
+        } else if let type = json["type"] as? String, type == "slang_explanation",
+                  let messageId = json["messageId"] as? String,
+                  let data = json["data"] as? [String: Any] {
+            // Handle slang explanation response
+            Task { @MainActor in
+                print("🚨🚨🚨 SLANG EXPLANATION RESPONSE RECEIVED 🚨🚨🚨")
+                print("   MessageID: \(messageId)")
+                print("   Data: \(data)")
+                
+                if let hasContext = data["hasContext"] as? Bool, hasContext,
+                   let hintsData = data["hints"] as? [[String: Any]] {
+                    print("   Has context: YES, hints count: \(hintsData.count)")
+                    // Convert to CulturalHint objects and store in AITranslationService
+                    var hints: [CulturalHint] = []
+                    for hintDict in hintsData {
+                        if let phrase = hintDict["phrase"] as? String,
+                           let explanation = hintDict["explanation"] as? String,
+                           let actualMeaning = hintDict["actualMeaning"] as? String {
+                            let hint = CulturalHint(
+                                phrase: phrase,
+                                explanation: explanation,
+                                literalMeaning: hintDict["literalMeaning"] as? String ?? "",
+                                actualMeaning: actualMeaning
+                            )
+                            hints.append(hint)
+                            print("   ✅ Parsed hint: \(phrase)")
+                        }
+                    }
+                    AITranslationService.shared.culturalHints[messageId] = hints
+                    print("✅✅✅ Stored \(hints.count) slang hints for message: \(messageId)")
+                } else {
+                    print("   ⚠️ No context or empty hints")
+                }
+            }
         } else {
                     print("⚠️ Unknown message format: \(json)")
                 }
@@ -877,6 +1001,38 @@ class WebSocketService: ObservableObject {
         } else if reconnectAttempt >= maxReconnectAttempts {
             print("❌ Max reconnection attempts reached")
             connectionState = .disconnected
+        }
+    }
+    
+    // MARK: - AI Features
+    
+    func requestSlangExplanation(message: String, messageId: String, targetLang: String = "en") {
+        print("🚨🚨🚨 TRANSLATE & EXPLAIN REQUEST 🚨🚨🚨")
+        print("   Message: \(message)")
+        print("   MessageID: \(messageId)")
+        print("   Language: \(targetLang)")
+        print("   WebSocket state: \(connectionState)")
+        print("   WebSocket task exists: \(webSocketTask != nil)")
+        
+        let payload: [String: Any] = [
+            "action": "translateAndExplain",
+            "message": message,
+            "messageId": messageId,
+            "targetLang": targetLang
+        ]
+        
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            print("📤 Sending WebSocket payload: \(json)")
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error {
+                    print("❌❌❌ Translate & Explain request FAILED: \(error.localizedDescription)")
+                } else {
+                    print("✅✅✅ Translate & Explain request SENT successfully via WebSocket")
+                }
+            }
+        } else {
+            print("❌❌❌ Failed to serialize JSON payload")
         }
     }
     

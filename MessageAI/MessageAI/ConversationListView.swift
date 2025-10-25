@@ -40,6 +40,11 @@ struct ConversationListView: View {
         return conversations
     }
     
+    // Calculate total unread messages across all conversations
+    private var totalUnreadCount: Int {
+        conversations.reduce(0) { $0 + $1.unreadCount }
+    }
+    
     // Break up complex view into smaller components
     @ViewBuilder
     private var emptyStateView: some View {
@@ -244,11 +249,19 @@ struct ConversationListView: View {
                     Task { await syncService?.processQueueIfPossible() }
                 }
             }
+            .onChange(of: totalUnreadCount) { oldValue, newValue in
+                // Update app icon badge count when unread messages change
+                print("🔔 Total unread count changed: \(oldValue) → \(newValue)")
+                NotificationManager.shared.setBadgeCount(newValue)
+            }
             .onAppear {
                 if syncService == nil {
                     syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
                 }
                 Task { await syncService?.processQueueIfPossible() }
+                
+                // Set initial badge count
+                NotificationManager.shared.setBadgeCount(totalUnreadCount)
                 
                 // Clean up any duplicate direct message conversations that should be groups
                 cleanupDuplicateConversations()
@@ -366,6 +379,20 @@ extension ConversationListView {
             return
         }
         
+        // Calculate total unread count for badge
+        let currentUnreadCount = conversations.reduce(0) { $0 + $1.unreadCount }
+        let newBadgeCount = currentUnreadCount + 1
+        
+        // Show local notification banner for incoming message
+        // This simulates a push notification banner
+        let conversationName = payload.conversationName ?? payload.senderName
+        NotificationManager.shared.showLocalNotification(
+            title: conversationName,
+            body: payload.content,
+            conversationId: payload.conversationId,
+            badge: newBadgeCount
+        )
+        
         let timestamp = ISO8601DateFormatter().date(from: payload.timestamp) ?? Date()
         
         // Save the message locally (avoid duplicates)
@@ -402,8 +429,16 @@ extension ConversationListView {
             print("   ✅ Found existing conversation, updating last message")
             existing.lastMessage = payload.content
             existing.lastMessageTime = timestamp
-            // Increment unread count
-            existing.unreadCount += 1
+            // Increment unread count only if message is from someone else
+            // AND user is not currently viewing this conversation
+            if payload.senderId != authViewModel.currentUser?.id {
+                if webSocketService.currentlyViewedConversationId == payload.conversationId {
+                    print("   👁️ User is viewing this conversation - not incrementing unread count")
+                } else {
+                    existing.unreadCount += 1
+                    print("   🔔 Incremented unread count to \(existing.unreadCount)")
+                }
+            }
             do { try modelContext.save() } catch { print("❌ Error updating conversation: \(error)") }
         } else {
             print("   ⚠️ Conversation not found - creating new one")
@@ -482,7 +517,11 @@ extension ConversationListView {
             groupName: groupName,
             lastMessage: lastMessage?.content,
             lastMessageTime: lastMessage?.timestamp ?? createdAt,
-            unreadCount: groupMessages.filter { $0.senderId != authViewModel.currentUser?.id }.count,
+            unreadCount: groupMessages.filter { 
+                $0.senderId != authViewModel.currentUser?.id && 
+                !$0.isRead && 
+                !$0.isDeleted 
+            }.count,
             createdBy: createdBy,
             createdByName: createdByName,
             createdAt: createdAt,

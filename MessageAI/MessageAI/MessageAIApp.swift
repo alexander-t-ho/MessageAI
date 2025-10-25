@@ -7,9 +7,30 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
+
+// App Delegate for handling push notifications
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        // Initialize notification manager
+        _ = NotificationManager.shared
+        return true
+    }
+    
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationManager.shared.registerDeviceToken(deviceToken)
+    }
+    
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationManager.shared.registrationFailed(error)
+    }
+}
 
 @main
 struct MessageAIApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var notificationManager = NotificationManager.shared
+    @Environment(\.scenePhase) var scenePhase
     
     init() {
         // EXTREMELY LOUD console output - THIS RUNS FIRST!
@@ -69,6 +90,22 @@ struct MessageAIApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    switch newPhase {
+                    case .active:
+                        print("📱 App became ACTIVE")
+                        // Request notification permissions if not granted
+                        NotificationManager.shared.requestNotificationPermission()
+                    case .inactive:
+                        print("📱 App became INACTIVE")
+                    case .background:
+                        print("📱 App entered BACKGROUND")
+                        // Note: WebSocket will remain connected for ~30 seconds
+                        // Local notifications can still be triggered during this time
+                    @unknown default:
+                        print("📱 Unknown scene phase")
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
     }

@@ -41,21 +41,51 @@ export const handler = async (event) => {
   
   try {
     // Update message as deleted in DynamoDB
-    await docClient.send(new UpdateCommand({
-      TableName: MESSAGES_TABLE,
-      Key: { messageId },
-      UpdateExpression: "SET #del = :true, #cont = :deletedText, deletedAt = :now, deletedBy = :sender",
-      ExpressionAttributeNames: {
-        "#del": "isDeleted",
-        "#cont": "content"
-      },
-      ExpressionAttributeValues: {
-        ":true": true,
-        ":deletedText": "This message was deleted",
-        ":now": new Date().toISOString(),
-        ":sender": senderId
-      }
-    }));
+    if (isGroupChat && allRecipientIds.length > 0) {
+      // For group chats: Delete all per-recipient records
+      console.log(`Deleting group chat message for ${allRecipientIds.length} recipients`);
+      const deletePromises = allRecipientIds.map(async (recipId) => {
+        const perRecipientMessageId = `${messageId}_${recipId}`;
+        try {
+          await docClient.send(new UpdateCommand({
+            TableName: MESSAGES_TABLE,
+            Key: { messageId: perRecipientMessageId },
+            UpdateExpression: "SET #del = :true, #cont = :deletedText, deletedAt = :now, deletedBy = :sender",
+            ExpressionAttributeNames: {
+              "#del": "isDeleted",
+              "#cont": "content"
+            },
+            ExpressionAttributeValues: {
+              ":true": true,
+              ":deletedText": "This message was deleted",
+              ":now": new Date().toISOString(),
+              ":sender": senderId
+            }
+          }));
+          console.log(`  - Marked ${perRecipientMessageId} as deleted`);
+        } catch (e) {
+          console.error(`  - Error deleting ${perRecipientMessageId}:`, e);
+        }
+      });
+      await Promise.all(deletePromises);
+    } else {
+      // For direct messages: Delete single record
+      await docClient.send(new UpdateCommand({
+        TableName: MESSAGES_TABLE,
+        Key: { messageId },
+        UpdateExpression: "SET #del = :true, #cont = :deletedText, deletedAt = :now, deletedBy = :sender",
+        ExpressionAttributeNames: {
+          "#del": "isDeleted",
+          "#cont": "content"
+        },
+        ExpressionAttributeValues: {
+          ":true": true,
+          ":deletedText": "This message was deleted",
+          ":now": new Date().toISOString(),
+          ":sender": senderId
+        }
+      }));
+    }
     
     console.log(`Message ${messageId} marked as deleted`);
     

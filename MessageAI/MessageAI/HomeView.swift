@@ -36,7 +36,9 @@ struct HomeView: View {
 
 struct ProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var aiService = AITranslationService.shared
     @State private var showDatabaseTest = false
+    @State private var showLanguagePreferences = false
     
     var body: some View {
         NavigationStack {
@@ -62,6 +64,15 @@ struct ProfileView: View {
                                 Text(user.email)
                                     .font(.subheadline)
                                     .foregroundColor(.gray)
+                                
+                                // Language preference indicator
+                                HStack(spacing: 4) {
+                                    Text(aiService.preferredLanguage.flag)
+                                        .font(.caption)
+                                    Text(aiService.preferredLanguage.displayName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                             .padding(.leading, 8)
                         }
@@ -71,14 +82,99 @@ struct ProfileView: View {
                     Text("Account")
                 }
                 
+                // Language & Translation Section
+                Section {
+                    Button(action: { showLanguagePreferences = true }) {
+                        HStack {
+                            Image(systemName: "globe")
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Language & Translation")
+                                    .foregroundColor(.primary)
+                                
+                                HStack(spacing: 4) {
+                                    Text("\(aiService.preferredLanguage.flag) \(aiService.preferredLanguage.displayName)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    
+                                    if aiService.autoTranslateEnabled {
+                                        Text("• Auto-translate ON")
+                                            .font(.caption)
+                                            .foregroundColor(.green)
+                                    }
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    // Quick Language Selector
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundColor(.orange)
+                            .frame(width: 24)
+                        
+                        Text("Quick Switch")
+                            .font(.callout)
+                        
+                        Spacer()
+                        
+                        Menu {
+                            ForEach(getQuickLanguages(), id: \.self) { language in
+                                Button(action: {
+                                    aiService.preferredLanguage = language
+                                    aiService.savePreferences()
+                                }) {
+                                    Label {
+                                        Text(language.displayName)
+                                    } icon: {
+                                        Text(language.flag)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                ForEach(getQuickLanguages().prefix(3), id: \.self) { lang in
+                                    Text(lang.flag)
+                                        .font(.caption)
+                                }
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(6)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("AI Features")
+                }
+                
                 // Phase Progress Section
                 Section {
                     ProgressRow(icon: "checkmark.circle.fill", text: "Authentication", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Local Database", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Draft Messages", status: .complete, color: .green)
-                    ProgressRow(icon: "hammer.circle.fill", text: "One-on-One Messaging", status: .inProgress, color: .blue)
-                    ProgressRow(icon: "circle", text: "Real-Time Updates", status: .pending, color: .gray)
-                    ProgressRow(icon: "circle", text: "Offline Support", status: .pending, color: .gray)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Real-Time Messaging", status: .complete, color: .green)
+                    ProgressRow(icon: "hammer.circle.fill", text: "Read Receipts & Timestamps", status: .inProgress, color: .blue)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Online/Offline Presence", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Typing Indicators", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Group Chat", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Message Editing", status: .complete, color: .green)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "AI Translation & Slang", status: .complete, color: .green)
+                    ProgressRow(icon: "hammer.circle.fill", text: "Push Notifications", status: .inProgress, color: .blue)
                 } header: {
                     Text("Development Progress")
                 }
@@ -115,7 +211,29 @@ struct ProfileView: View {
             .sheet(isPresented: $showDatabaseTest) {
                 DatabaseTestView()
             }
+            .sheet(isPresented: $showLanguagePreferences) {
+                LanguagePreferencesView()
+            }
+            .onAppear {
+                // Set auth token for AI service when profile loads
+                if let token = UserDefaults.standard.string(forKey: "accessToken") {
+                    AITranslationService.shared.setAuthToken(token)
+                }
+            }
         }
+    }
+    
+    private func getQuickLanguages() -> [SupportedLanguage] {
+        // Return the user's most commonly used languages
+        // For now, return a default set of popular languages
+        var languages = [SupportedLanguage.english, .spanish, .french, .chinese, .arabic, .japanese]
+        
+        // Make sure current language is included
+        if !languages.contains(aiService.preferredLanguage) {
+            languages.insert(aiService.preferredLanguage, at: 0)
+        }
+        
+        return languages
     }
 }
 

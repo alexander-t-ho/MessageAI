@@ -39,6 +39,12 @@ struct ContentView: View {
                                 print("🔌 Connecting to WebSocket with userId: \(userId)")
                                 webSocketService.connect(userId: userId)
                             }
+                            
+                            // Request notification permission after authentication
+                            NotificationManager.shared.requestNotificationPermission()
+                            
+                            // Send stored device token if available (after WebSocket connects)
+                            NotificationManager.shared.sendStoredTokenIfAvailable(webSocketService: webSocketService)
                         }
                     }
                     .onDisappear {

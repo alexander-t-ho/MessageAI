@@ -211,6 +211,8 @@ final class PendingMessageData {
     var senderId: String
     var senderName: String
     var recipientId: String
+    var recipientIds: [String] // For group chats
+    var isGroupChat: Bool
     var content: String
     var timestamp: Date
     var retryCount: Int
@@ -223,6 +225,8 @@ final class PendingMessageData {
         senderId: String,
         senderName: String,
         recipientId: String,
+        recipientIds: [String] = [],
+        isGroupChat: Bool = false,
         content: String,
         timestamp: Date = Date(),
         retryCount: Int = 0,
@@ -234,6 +238,8 @@ final class PendingMessageData {
         self.senderId = senderId
         self.senderName = senderName
         self.recipientId = recipientId
+        self.recipientIds = recipientIds
+        self.isGroupChat = isGroupChat
         self.content = content
         self.timestamp = timestamp
         self.retryCount = retryCount

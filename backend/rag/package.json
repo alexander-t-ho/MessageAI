@@ -1,0 +1,28 @@
+{
+  "name": "messageai-rag-slang",
+  "version": "1.0.0",
+  "description": "RAG pipeline for slang detection with LangChain + Pinecone",
+  "main": "rag-slang-langchain.js",
+  "scripts": {
+    "ingest": "node ingest-slang-langchain.js",
+    "test": "node test-rag-langchain.js",
+    "deploy": "./deploy-rag.sh"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "^0.1.0",
+    "@langchain/openai": "^0.0.19",
+    "@langchain/community": "^0.0.25",
+    "@langchain/core": "^0.1.0",
+    "langchain": "^0.1.0",
+    "langsmith": "^0.0.48",
+    "@pinecone-database/pinecone": "^1.1.0",
+    "@aws-sdk/client-secrets-manager": "^3.450.0",
+    "@aws-sdk/client-lambda": "^3.450.0",
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.450.0",
+    "@aws-sdk/client-dynamodb": "^3.450.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
+    "openai": "^4.20.0"
+  },
+  "author": "Alex Ho",
+  "license": "ISC"
+}
