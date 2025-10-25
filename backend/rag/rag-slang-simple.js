@@ -15,10 +15,10 @@ const SLANG_TABLE = "SlangDatabase_AlexHo";
 const CACHE_TABLE = "TranslationsCache_AlexHo";
 const CACHE_TTL_HOURS = 24 * 7;
 
-// Get Claude API key
-async function getClaudeApiKey() {
+// Get OpenAI API key
+async function getOpenAIKey() {
   const response = await secretsClient.send(
-    new GetSecretValueCommand({ SecretId: "claude-api-key-alexho" })
+    new GetSecretValueCommand({ SecretId: "openai-api-key-alexho" })
   );
   return JSON.parse(response.SecretString).apiKey;
 }
@@ -55,9 +55,9 @@ async function retrieveRelevantSlang(message) {
   return relevantSlang;
 }
 
-// Generate explanation with Claude
-async function generateExplanation(message, relevantSlang, claudeApiKey) {
-  console.log('[RAG-Simple] Generating explanation with Claude...');
+// Generate explanation with OpenAI
+async function generateExplanation(message, relevantSlang, openaiApiKey) {
+  console.log('[RAG-Simple] Generating explanation with OpenAI GPT-4...');
   
   // Build context from retrieved slang
   let context = '';
@@ -94,27 +94,28 @@ Return ONLY a JSON object with this exact format:
 
 If no slang is found, return {"hasContext": false, "hints": []}`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': claudeApiKey,
-      'anthropic-version': '2023-06-01'
+      'Authorization': `Bearer ${openaiApiKey}`
     },
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
+      model: 'gpt-4-turbo-preview',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3
+      temperature: 0.3,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' }
     })
   });
   
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`);
+    const error = await response.text();
+    throw new Error(`OpenAI API error: ${response.status} - ${error}`);
   }
   
   const result = await response.json();
-  return JSON.parse(result.content[0].text);
+  return JSON.parse(result.choices[0].message.content);
 }
 
 // Check cache
@@ -185,14 +186,14 @@ exports.handler = async (event) => {
       };
     }
     
-    // Get Claude API key
-    const claudeApiKey = await getClaudeApiKey();
+    // Get OpenAI API key
+    const openaiApiKey = await getOpenAIKey();
     
     // Step 1: Retrieve relevant slang from DynamoDB
     const relevantSlang = await retrieveRelevantSlang(message);
     
-    // Step 2: Generate explanation with Claude
-    const explanation = await generateExplanation(message, relevantSlang, claudeApiKey);
+    // Step 2: Generate explanation with OpenAI GPT-4
+    const explanation = await generateExplanation(message, relevantSlang, openaiApiKey);
     
     // Cache the result
     await storeCache(message, explanation);
