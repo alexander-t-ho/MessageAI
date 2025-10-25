@@ -201,11 +201,7 @@ class AITranslationService: ObservableObject {
             
             if let result = result {
                 translations[messageId] = result
-                
-                // Check for cultural context if translation has low confidence
-                if let confidence = result.confidence, confidence < 0.9 {
-                    await getCulturalContext(for: text, targetLang: target, messageId: messageId)
-                }
+                // Note: User can manually request slang explanation via "Explain Slang" button
             }
         } catch {
             print("Translation error: \(error)")
