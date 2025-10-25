@@ -294,7 +294,7 @@ struct TranslationSheetView: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("Means:")
+                Text(localizedLabel("means"))
                     .font(.caption)
                     .foregroundColor(.orange)
                     .fontWeight(.semibold)
@@ -306,7 +306,7 @@ struct TranslationSheetView: View {
             
             if !hint.explanation.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Context:")
+                    Text(localizedLabel("context"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fontWeight(.semibold)
@@ -320,7 +320,7 @@ struct TranslationSheetView: View {
             
             if !hint.literalMeaning.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Literally:")
+                    Text(localizedLabel("literally"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fontWeight(.semibold)
@@ -403,6 +403,58 @@ struct TranslationSheetView: View {
                 print("⏱️ Slang explanation timeout")
             }
         }
+    }
+    
+    private func localizedLabel(_ key: String) -> String {
+        let lang = aiService.preferredLanguage.rawValue
+        
+        // Common translations for UI labels
+        let translations: [String: [String: String]] = [
+            "means": [
+                "es": "Significa",
+                "fr": "Signifie",
+                "de": "Bedeutet",
+                "it": "Significa",
+                "pt": "Significa",
+                "zh": "意思是",
+                "ja": "意味",
+                "ko": "의미",
+                "ar": "يعني",
+                "ru": "Означает",
+                "hi": "मतलब",
+                "vi": "Có nghĩa là"
+            ],
+            "context": [
+                "es": "Contexto",
+                "fr": "Contexte",
+                "de": "Kontext",
+                "it": "Contesto",
+                "pt": "Contexto",
+                "zh": "背景",
+                "ja": "コンテキスト",
+                "ko": "맥락",
+                "ar": "السياق",
+                "ru": "Контекст",
+                "hi": "संदर्भ",
+                "vi": "Ngữ cảnh"
+            ],
+            "literally": [
+                "es": "Literalmente",
+                "fr": "Littéralement",
+                "de": "Wörtlich",
+                "it": "Letteralmente",
+                "pt": "Literalmente",
+                "zh": "字面意思",
+                "ja": "文字通り",
+                "ko": "문자 그대로",
+                "ar": "حرفيا",
+                "ru": "Буквально",
+                "hi": "शाब्दिक रूप से",
+                "vi": "Theo nghĩa đen"
+            ]
+        ]
+        
+        return translations[key]?[lang] ?? key.capitalized + ":"
     }
     
     private func copyAll() {

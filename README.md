@@ -112,33 +112,56 @@ Production-quality iOS messaging app with real-time delivery, AI-powered transla
 ```
 MessageAI/
 ├── README.md                          # This file
-├── Guides and Build Strategies/       # Documentation and guides
-│   ├── AI Implementation guides
+├── Guides and Build Strategies/       # Documentation (30+ guides)
+│   ├── AI implementation guides
 │   ├── RAG pipeline documentation
 │   ├── Push notification setup
-│   └── Phase completion summaries
+│   ├── Phase completion summaries
+│   ├── Testing and debugging guides
+│   └── Feature documentation
 ├── MessageAI/                         # iOS app (Xcode project)
 │   └── MessageAI/                     # Swift source code
-│       ├── AITranslationService.swift # AI translation & slang
-│       ├── WebSocketService.swift     # Real-time messaging
-│       ├── ChatView.swift             # Main chat interface
-│       ├── ConversationListView.swift # Message list
-│       ├── ProfileView.swift          # User profile
-│       ├── LanguagePreferencesView.swift # AI settings
-│       └── TranslationSheetView.swift # AI results display
+│       ├── Views/
+│       │   ├── ChatView.swift             # Main chat interface
+│       │   ├── ConversationListView.swift # Message list
+│       │   ├── HomeView.swift             # Tab navigation & profile
+│       │   ├── TranslationSheetView.swift # AI results display
+│       │   ├── ProfileCustomizationView.swift # Personalization
+│       │   ├── LanguagePreferencesView.swift # AI settings
+│       │   └── [other views]
+│       ├── Services/
+│       │   ├── WebSocketService.swift     # Real-time messaging
+│       │   ├── AITranslationService.swift # AI translation & slang
+│       │   ├── NotificationManager.swift  # Smart notifications
+│       │   ├── SyncService.swift          # Offline sync
+│       │   └── UserPreferences.swift      # User customization
+│       ├── Models/
+│       │   ├── DataModels.swift           # SwiftData models
+│       │   ├── AuthViewModel.swift        # Authentication
+│       │   └── Config.swift               # Configuration
+│       └── MessageAIApp.swift             # App entry point
 ├── backend/                           # AWS Lambda functions
 │   ├── websocket/                     # WebSocket handlers
 │   │   ├── connect.js                 # Connection management
 │   │   ├── sendMessage.js             # Message delivery
 │   │   ├── markRead.js                # Read receipts
 │   │   ├── translateAndExplainSimple.js # AI translation+slang
+│   │   ├── editMessage.js             # Message editing
+│   │   ├── deleteMessage.js           # Message deletion
+│   │   ├── groupCreated.js            # Group chat creation
+│   │   ├── groupUpdate.js             # Group updates
+│   │   ├── presenceUpdate.js          # Online/offline status
+│   │   ├── typing.js                  # Typing indicators
 │   │   └── [other handlers]
 │   ├── rag/                           # RAG pipeline
 │   │   ├── rag-slang-simple.js        # Slang detection
 │   │   ├── slang-database.json        # Slang terms (21)
-│   │   └── ingest-slang-dynamodb.js   # Database setup
+│   │   ├── ingest-slang-dynamodb.js   # Database setup
+│   │   └── deploy-rag-simple.sh       # Deployment script
 │   └── ai/                            # AI services
-│       └── translate.js               # Translation Lambda
+│       ├── translate.js               # Translation Lambda
+│       ├── deploy-ai-services.sh      # Deployment script
+│       └── package.json               # Dependencies
 └── setup-push-notifications.sh        # APNs setup script
 ```
 
@@ -163,11 +186,18 @@ MessageAI/
 - **Smart Replies**: AI-suggested responses (coming soon)
 - **Language Preferences**: Set preferred translation language
 
+### Personalization
+- **Profile Pictures**: Upload custom photos from library
+- **Message Colors**: Color wheel picker with 12 presets + custom HSB
+- **Dark Mode**: System/Light/Dark theme toggle
+- **All Preferences**: Persist across app restarts
+
 ### User Experience
 - **Modern UI**: Clean, intuitive SwiftUI design
 - **Fast**: Optimized for performance
 - **Reliable**: Robust error handling
 - **Accessible**: Clear visual feedback
+- **Customizable**: Make it your own with colors and pictures
 
 ---
 
