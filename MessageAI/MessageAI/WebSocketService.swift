@@ -758,9 +758,13 @@ class WebSocketService: ObservableObject {
                   let data = json["data"] as? [String: Any] {
             // Handle slang explanation response
             Task { @MainActor in
-                print("💡 Slang explanation received for message: \(messageId)")
+                print("🚨🚨🚨 SLANG EXPLANATION RESPONSE RECEIVED 🚨🚨🚨")
+                print("   MessageID: \(messageId)")
+                print("   Data: \(data)")
+                
                 if let hasContext = data["hasContext"] as? Bool, hasContext,
                    let hintsData = data["hints"] as? [[String: Any]] {
+                    print("   Has context: YES, hints count: \(hintsData.count)")
                     // Convert to CulturalHint objects and store in AITranslationService
                     var hints: [CulturalHint] = []
                     for hintDict in hintsData {
@@ -774,10 +778,13 @@ class WebSocketService: ObservableObject {
                                 actualMeaning: actualMeaning
                             )
                             hints.append(hint)
+                            print("   ✅ Parsed hint: \(phrase)")
                         }
                     }
                     AITranslationService.shared.culturalHints[messageId] = hints
-                    print("✅ Stored \(hints.count) slang hints for message: \(messageId)")
+                    print("✅✅✅ Stored \(hints.count) slang hints for message: \(messageId)")
+                } else {
+                    print("   ⚠️ No context or empty hints")
                 }
             }
         } else {
@@ -942,7 +949,12 @@ class WebSocketService: ObservableObject {
     // MARK: - AI Features
     
     func requestSlangExplanation(message: String, messageId: String, targetLang: String = "en") {
-        print("💡 Requesting slang explanation for message: \(messageId), language: \(targetLang)")
+        print("🚨🚨🚨 SLANG EXPLANATION REQUEST 🚨🚨🚨")
+        print("   Message: \(message)")
+        print("   MessageID: \(messageId)")
+        print("   Language: \(targetLang)")
+        print("   WebSocket state: \(connectionState)")
+        print("   WebSocket task exists: \(webSocketTask != nil)")
         
         let payload: [String: Any] = [
             "action": "explainSlang",
@@ -953,13 +965,16 @@ class WebSocketService: ObservableObject {
         
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let json = String(data: data, encoding: .utf8) {
+            print("📤 Sending WebSocket payload: \(json)")
             webSocketTask?.send(.string(json)) { error in
                 if let error = error {
-                    print("❌ Slang explanation request error: \(error.localizedDescription)")
+                    print("❌❌❌ Slang request FAILED: \(error.localizedDescription)")
                 } else {
-                    print("✅ Slang explanation requested via WebSocket")
+                    print("✅✅✅ Slang request SENT successfully via WebSocket")
                 }
             }
+        } else {
+            print("❌❌❌ Failed to serialize JSON payload")
         }
     }
     

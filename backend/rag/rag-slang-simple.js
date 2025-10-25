@@ -23,36 +23,27 @@ async function getOpenAIKey() {
   return JSON.parse(response.SecretString).apiKey;
 }
 
-// Retrieve potentially relevant slang from DynamoDB
-async function retrieveRelevantSlang(message) {
-  console.log('[RAG-Simple] Retrieving slang from DynamoDB...');
+// Retrieve ALL slang from DynamoDB (let GPT-4 decide what's relevant)
+async function retrieveAllSlang() {
+  console.log('[RAG-Simple] Retrieving ALL slang from DynamoDB...');
   
-  // Get all slang terms (small dataset, so scan is fine)
-  const result = await docClient.send(new ScanCommand({
-    TableName: SLANG_TABLE
-  }));
-  
-  if (!result.Items || result.Items.length === 0) {
-    console.log('[RAG-Simple] No slang in database, using empty context');
-    return [];
-  }
-  
-  console.log(`[RAG-Simple] Found ${result.Items.length} total slang terms`);
-  
-  // Use simple keyword matching to filter relevant terms
-  const messageLower = message.toLowerCase();
-  const relevantSlang = result.Items.filter(slang => {
-    const term = slang.term.toLowerCase();
-    const synonyms = JSON.parse(slang.synonyms || '[]').map(s => s.toLowerCase());
+  try {
+    const result = await docClient.send(new ScanCommand({
+      TableName: SLANG_TABLE
+    }));
     
-    // Check if term or any synonym appears in message
-    return messageLower.includes(term) || synonyms.some(syn => messageLower.includes(syn));
-  });
-  
-  console.log(`[RAG-Simple] Found ${relevantSlang.length} relevant terms:`, 
-    relevantSlang.map(s => s.term).join(', '));
-  
-  return relevantSlang;
+    if (!result.Items || result.Items.length === 0) {
+      console.log('[RAG-Simple] WARNING: No slang in database!');
+      return [];
+    }
+    
+    console.log(`[RAG-Simple] Loaded ${result.Items.length} slang terms from database`);
+    return result.Items;
+    
+  } catch (error) {
+    console.error('[RAG-Simple] Error loading slang database:', error);
+    return []; // Fallback to empty - GPT-4 will still work
+  }
 }
 
 // Generate explanation with OpenAI (in user's preferred language)
@@ -85,45 +76,49 @@ async function generateExplanation(message, relevantSlang, openaiApiKey, targetL
   
   const targetLanguageName = languageNames[targetLang] || 'English';
   
-  // Build context from retrieved slang
-  let context = '';
+  // Build rich context from ALL slang in database
+  let knownSlang = '';
   if (relevantSlang.length > 0) {
-    context = 'Known slang terms found in the message:\n\n';
+    knownSlang = 'Reference slang database (use as hints, but detect ANY slang you find):\n\n';
     relevantSlang.forEach(slang => {
-      context += `Term: "${slang.term}"\n`;
-      context += `Definition: ${slang.definition}\n`;
-      context += `Usage: ${slang.usage}\n`;
-      context += `Examples: ${slang.examples}\n\n`;
+      knownSlang += `- "${slang.term}": ${slang.definition}\n`;
     });
+    knownSlang += '\n';
   }
   
-  const prompt = `${context}
+  const prompt = `${knownSlang}You are an expert on Gen Z slang, internet culture, and youth language.
 
-Analyze this message for slang, idioms, or Gen Z expressions that an older reader might not understand:
+Analyze this message and detect ANY slang, abbreviations, or youth expressions:
 
 "${message}"
 
-For EACH slang term or youth expression found, provide a clear explanation **in ${targetLanguageName}**.
+Common slang to watch for (detect these even if not in reference list):
+- rizz (charisma), no cap (no lie), bussin (really good), slay (do amazingly)
+- fr/frfr (for real), ngl (not gonna lie), iykyk (if you know you know)
+- lowkey/highkey, vibe check, mid, fire, lit, bet, cap, flex, simp
 
-IMPORTANT: 
-- Keep the original English slang term in the "phrase" field (don't translate it)
-- Write the explanation, literalMeaning, and actualMeaning fields in ${targetLanguageName}
-- Make explanations clear and easy to understand
+For EACH slang term or expression found, explain it clearly **in ${targetLanguageName}**.
 
-Return ONLY a JSON object with this exact format:
+CRITICAL: 
+- Detect slang EVEN IF not in the reference list above
+- "rizz", "bussin", "no cap" are DEFINITELY slang - always detect them!
+- Keep original slang term in "phrase" field (don't translate the term itself)
+- Write explanation and meaning in ${targetLanguageName}
+
+Return ONLY valid JSON:
 {
   "hasContext": true/false,
   "hints": [
     {
-      "phrase": "exact English term from message",
-      "explanation": "explanation in ${targetLanguageName} (e.g., 'Jerga de la Generación Z para...' if Spanish)",
-      "literalMeaning": "literal translation in ${targetLanguageName} if applicable, otherwise empty string",
-      "actualMeaning": "what it actually means in ${targetLanguageName}"
+      "phrase": "exact term from message (in original language)",
+      "explanation": "who uses this, in ${targetLanguageName}",
+      "literalMeaning": "literal meaning in ${targetLanguageName}, or empty string",
+      "actualMeaning": "simple explanation in ${targetLanguageName}"
     }
   ]
 }
 
-If no slang is found, return {"hasContext": false, "hints": []}`;
+If absolutely NO slang exists, return {"hasContext": false, "hints": []}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -223,11 +218,13 @@ exports.handler = async (event) => {
     // Get OpenAI API key
     const openaiApiKey = await getOpenAIKey();
     
-    // Step 1: Retrieve relevant slang from DynamoDB
-    const relevantSlang = await retrieveRelevantSlang(message);
+    // Step 1: Retrieve ALL slang from DynamoDB (GPT-4 will filter)
+    const allSlang = await retrieveAllSlang();
+    console.log(`[RAG-Simple] Using ${allSlang.length} slang terms as context`);
     
     // Step 2: Generate explanation with OpenAI GPT-4 in target language
-    const explanation = await generateExplanation(message, relevantSlang, openaiApiKey, targetLang);
+    // GPT-4 is smart enough to detect slang even without perfect keyword matches
+    const explanation = await generateExplanation(message, allSlang, openaiApiKey, targetLang);
     
     // Cache the result
     await storeCache(message, explanation);
@@ -239,7 +236,8 @@ exports.handler = async (event) => {
         success: true,
         result: explanation,
         fromCache: false,
-        retrievedTerms: relevantSlang.map(s => s.term)
+        databaseSize: allSlang.length,
+        detectedCount: explanation.hints?.length || 0
       })
     };
     
