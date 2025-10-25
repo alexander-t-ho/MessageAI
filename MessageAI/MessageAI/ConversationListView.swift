@@ -298,13 +298,12 @@ struct ConversationListView: View {
         handleGroupUpdate(updateData)
     }
     
-    private func handleConnectionStateChange(_ state: WebSocketService.ConnectionState) {
-        if case .connected = state {
-            if syncService == nil {
-                syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
-            }
-            Task { await syncService?.processQueueIfPossible() }
+    private func handleConnectionStateChange(_ state: Any) {
+        // Initialize sync service when connected
+        if syncService == nil {
+            syncService = SyncService(webSocket: webSocketService, modelContext: modelContext)
         }
+        Task { await syncService?.processQueueIfPossible() }
     }
     
     private func handleUnreadCountChange(_ oldValue: Int, _ newValue: Int) {

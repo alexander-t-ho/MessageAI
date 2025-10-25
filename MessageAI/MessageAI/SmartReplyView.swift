@@ -263,7 +263,7 @@ struct LanguageSelector: View {
                 List {
                     Section {
                         Toggle("Auto-translate messages", isOn: $aiService.autoTranslateEnabled)
-                            .onChange(of: aiService.autoTranslateEnabled) { _ in
+                            .onChange(of: aiService.autoTranslateEnabled) { _, _ in
                                 aiService.savePreferences()
                             }
                     }

@@ -77,7 +77,7 @@ struct MessageTranslationView: View {
             
             // Timestamp and status
             HStack(spacing: 4) {
-                if let editedAt = message.editedAt {
+                if message.editedAt != nil {
                     Text("Edited")
                         .font(.caption2)
                         .foregroundColor(isFromCurrentUser ? .white.opacity(0.7) : .gray)
@@ -336,7 +336,7 @@ struct MessageTranslationView: View {
             let textToAdjust = aiService.translations[message.id]?.translatedText ?? message.content
             if let adjustedText = await aiService.adjustFormality(text: textToAdjust, to: level) {
                 // Update the translation with adjusted text
-                var updatedTranslation = aiService.translations[message.id] ?? TranslationResult(
+                let updatedTranslation = aiService.translations[message.id] ?? TranslationResult(
                     translatedText: adjustedText,
                     detectedLanguage: nil,
                     confidence: 1.0,
@@ -436,7 +436,7 @@ struct ReplyIndicatorView: View {
                     .frame(width: 3)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(replyMessage.senderName ?? "Unknown")
+                    Text(replyMessage.senderName)
                         .font(.caption2)
                         .fontWeight(.medium)
                         .foregroundColor(isFromCurrentUser ? .white.opacity(0.8) : .secondary)

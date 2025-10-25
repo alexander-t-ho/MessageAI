@@ -199,13 +199,6 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             setBadgeCount(badgeNumber.intValue)
         }
         
-        // Check if user is currently viewing a conversation
-        // Only show banner if on home screen or app is in background
-        let isViewingConversation = NotificationCenter.default.publisher(for: Notification.Name("CurrentConversationId"))
-            .map { $0.object as? String }
-            .replaceNil(with: "")
-            .first()
-        
         // Get conversation ID from notification
         let notificationConversationId = notification.request.content.userInfo["conversationId"] as? String
         
