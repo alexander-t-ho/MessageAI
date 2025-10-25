@@ -18,6 +18,14 @@ struct TranslationSheetView: View {
         case both
     }
     
+    private var hintsCount: Int {
+        culturalHints.isEmpty ? (aiService.culturalHints[message.id] ?? []).count : culturalHints.count
+    }
+    
+    private var currentHints: [CulturalHint] {
+        culturalHints.isEmpty ? (aiService.culturalHints[message.id] ?? []) : culturalHints
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -128,8 +136,8 @@ struct TranslationSheetView: View {
                                 
                                 Spacer()
                                 
-                                if !culturalHints.isEmpty || !(aiService.culturalHints[message.id] ?? []).isEmpty {
-                                    Text("\((culturalHints.isEmpty ? aiService.culturalHints[message.id] : culturalHints)?.count ?? 0) terms")
+                                if hintsCount > 0 {
+                                    Text("\(hintsCount) terms")
                                         .font(.caption)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
@@ -148,9 +156,7 @@ struct TranslationSheetView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding()
                             } else {
-                                let hints = culturalHints.isEmpty ? (aiService.culturalHints[message.id] ?? []) : culturalHints
-                                
-                                if hints.isEmpty {
+                                if currentHints.isEmpty {
                                     VStack(spacing: 8) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .font(.system(size: 40))
@@ -165,7 +171,7 @@ struct TranslationSheetView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                                 } else {
-                                    ForEach(Array(hints.enumerated()), id: \.offset) { index, hint in
+                                    ForEach(Array(currentHints.enumerated()), id: \.offset) { index, hint in
                                         VStack(alignment: .leading, spacing: 8) {
                                             // Slang term header
                                             HStack {
@@ -353,10 +359,9 @@ struct TranslationSheetView: View {
             textToCopy += "Translation: \(translatedText)\n\n"
         }
         
-        let hints = culturalHints.isEmpty ? (aiService.culturalHints[message.id] ?? []) : culturalHints
-        if !hints.isEmpty {
+        if !currentHints.isEmpty {
             textToCopy += "Slang Explanations:\n"
-            for (index, hint) in hints.enumerated() {
+            for (index, hint) in currentHints.enumerated() {
                 textToCopy += "\(index + 1). \"\(hint.phrase)\": \(hint.actualMeaning)\n"
             }
         }
