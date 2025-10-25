@@ -1556,6 +1556,55 @@ struct MessageBubble: View {
                         }
                         .padding(.top, 4)
                     }
+                    
+                    // Slang & Cultural Context - Always shown for better understanding
+                    if let hints = AITranslationService.shared.culturalHints[message.id],
+                       !hints.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "lightbulb.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.orange)
+                                Text("Slang & Context")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(.top, 4)
+                            
+                            ForEach(hints, id: \.phrase) { hint in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    // The slang term highlighted
+                                    Text("**\"\(hint.phrase)\"**")
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                    
+                                    // What it means
+                                    HStack(alignment: .top, spacing: 4) {
+                                        Text("Means:")
+                                            .font(.caption2)
+                                            .foregroundColor(.orange)
+                                            .fontWeight(.medium)
+                                        Text(hint.actualMeaning)
+                                            .font(.caption2)
+                                            .foregroundColor(.primary)
+                                    }
+                                    
+                                    // Context/explanation
+                                    if !hint.explanation.isEmpty {
+                                        Text(hint.explanation)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .italic()
+                                    }
+                                }
+                                .padding(8)
+                                .background(Color.orange.opacity(0.05))
+                                .cornerRadius(8)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 } // End of ZStack
                 .offset(x: swipeOffset)
                 // force view refresh when status updates tick changes so latest read attaches correctly
@@ -1609,7 +1658,7 @@ struct MessageBubble: View {
                 )
                 .animation(.easeInOut(duration: 0.2), value: swipeOffset)
                 .contextMenu {
-                    // Translation options - only for incoming messages
+                    // AI Understanding options - only for incoming messages
                     if !isFromCurrentUser && !message.isDeleted {
                         Button(action: { 
                             Task {
@@ -1617,9 +1666,27 @@ struct MessageBubble: View {
                                     message.content,
                                     messageId: message.id
                                 )
+                                // Also check for slang/cultural context automatically
+                                await AITranslationService.shared.getCulturalContext(
+                                    for: message.content,
+                                    targetLang: AITranslationService.shared.preferredLanguage,
+                                    messageId: message.id
+                                )
                             }
                         }) {
                             Label("Translate", systemImage: "globe")
+                        }
+                        
+                        Button(action: { 
+                            Task {
+                                await AITranslationService.shared.getCulturalContext(
+                                    for: message.content,
+                                    targetLang: AITranslationService.shared.preferredLanguage,
+                                    messageId: message.id
+                                )
+                            }
+                        }) {
+                            Label("Explain Slang", systemImage: "lightbulb.fill")
                         }
                         
                         Divider()

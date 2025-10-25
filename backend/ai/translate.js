@@ -149,7 +149,7 @@ Text to translate: "${text}"`;
   }
 }
 
-// Get cultural context hints
+// Get cultural context hints and slang explanations
 async function getCulturalContext(text, sourceLang, targetLang, apiKey) {
   const cacheKey = generateCacheKey(text, `${sourceLang}-${targetLang}`, 'cultural');
   
@@ -158,22 +158,33 @@ async function getCulturalContext(text, sourceLang, targetLang, apiKey) {
     return cached.culturalHints;
   }
 
-  const prompt = `Analyze this text for cultural context, idioms, or expressions that might not translate directly from ${sourceLang} to ${targetLang}.
-Provide brief, helpful explanations for any cultural references or idioms.
+  const prompt = `Analyze this text for slang, idioms, cultural references, or Gen Z/youth expressions that an older reader might not understand.
+
+Focus on:
+- Modern slang (e.g., "rizz", "no cap", "bussin", "slay", "stan", "ghosting", "situationship")
+- Internet/social media language (e.g., "FR", "ngl", "iykyk", "periodt")
+- Cultural references that need context
+- Idioms that don't translate literally
+- Regional or generational expressions
+
+For EACH slang term or expression found, explain it clearly.
+
 Return ONLY a JSON object with this format:
 {
   "hasContext": true/false,
   "hints": [
     {
-      "phrase": "original phrase",
-      "explanation": "brief cultural explanation",
-      "literalMeaning": "what it literally means",
-      "actualMeaning": "what it actually means in context"
+      "phrase": "the exact slang term or phrase from the message",
+      "explanation": "who uses this (e.g., 'Gen Z slang for...', 'Internet slang meaning...')",
+      "literalMeaning": "what it literally means (if applicable, otherwise leave empty)",
+      "actualMeaning": "what it actually means in simple terms"
     }
   ]
 }
 
-Text: "${text}"`;
+Important: Only include terms that might confuse someone unfamiliar with youth/internet culture.
+
+Text to analyze: "${text}"`;
 
   const claudeResponse = await callClaude(apiKey, [
     { role: 'user', content: prompt }
@@ -184,6 +195,7 @@ Text: "${text}"`;
     await storeCache(cacheKey, { culturalHints: result });
     return result;
   } catch (parseError) {
+    console.log('[cultural] Parse error, returning empty hints');
     return { hasContext: false, hints: [] };
   }
 }
