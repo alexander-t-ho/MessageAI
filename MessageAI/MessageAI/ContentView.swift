@@ -33,6 +33,10 @@ struct ContentView: View {
                     .onAppear {
                         // Connect to WebSocket when user is authenticated
                         if let userId = authViewModel.currentUser?.id {
+                            // Reload user preferences for this user
+                            UserPreferences.shared.reloadForCurrentUser()
+                            print("🔄 Reloaded preferences for user: \(userId)")
+                            
                             if webSocketService.simulateOffline {
                                 print("⛔️ Simulated offline is ON; skipping initial WebSocket connect")
                             } else {

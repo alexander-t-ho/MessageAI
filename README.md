@@ -1,6 +1,8 @@
-# MessageAI - iOS Messaging App with AI Translation
+# Cloudy - AI-Powered Messaging App
 
 ## 🎯 Project Overview
+
+Nothing like a message to brighten a cloudy day!
 
 Production-quality iOS messaging app with real-time delivery, AI-powered translation, slang detection, and cultural context explanations.
 
@@ -110,7 +112,7 @@ Production-quality iOS messaging app with real-time delivery, AI-powered transla
 ## 📁 Project Structure
 
 ```
-MessageAI/
+Cloudy/ (repository: MessageAI)
 ├── README.md                          # This file
 ├── Guides and Build Strategies/       # Documentation (30+ guides)
 │   ├── AI implementation guides

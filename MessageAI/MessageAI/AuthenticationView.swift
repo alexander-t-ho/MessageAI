@@ -18,9 +18,13 @@ struct AuthenticationView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
+            // Background gradient - Sunset theme for Cloudy
             LinearGradient(
-                colors: [Color.blue.opacity(0.6), Color.purple.opacity(0.6)],
+                colors: [
+                    Color(red: 0.545, green: 0.361, blue: 0.965), // Purple
+                    Color(red: 0.231, green: 0.51, blue: 0.965),  // Blue
+                    Color(red: 0.976, green: 0.451, blue: 0.094)  // Orange
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -30,19 +34,35 @@ struct AuthenticationView: View {
                 Spacer()
                 
                 // Logo and title
-                VStack(spacing: 10) {
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 80))
+                VStack(spacing: 16) {
+                    // Cloud icon with gradient
+                    Image(systemName: "cloud.fill")
+                        .font(.system(size: 100))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.white, .white.opacity(0.8)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
+                    
+                    Text("Cloudy")
+                        .font(.system(size: 48, weight: .bold))
                         .foregroundColor(.white)
                     
-                    Text("MessageAI")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    Text(isSignUpMode ? "Create your account" : "Welcome back!")
+                    Text("Nothing like a message to brighten a cloudy day")
                         .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(.white.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .padding(.bottom, 8)
+                    
+                    if !isSignUpMode {
+                        Text("Welcome back!")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
                 .padding(.bottom, 30)
                 

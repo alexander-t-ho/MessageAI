@@ -15,9 +15,9 @@ class UserPreferences: ObservableObject {
     @Published var profileImageData: Data? {
         didSet {
             if let data = profileImageData {
-                UserDefaults.standard.set(data, forKey: "profileImageData")
+                UserDefaults.standard.set(data, forKey: userKey("profileImageData"))
             } else {
-                UserDefaults.standard.removeObject(forKey: "profileImageData")
+                UserDefaults.standard.removeObject(forKey: userKey("profileImageData"))
             }
         }
     }
@@ -33,27 +33,55 @@ class UserPreferences: ObservableObject {
     @Published var preferredColorScheme: ColorScheme? {
         didSet {
             if let scheme = preferredColorScheme {
-                UserDefaults.standard.set(scheme == .dark ? "dark" : "light", forKey: "preferredColorScheme")
+                UserDefaults.standard.set(scheme == .dark ? "dark" : "light", forKey: userKey("preferredColorScheme"))
             } else {
-                UserDefaults.standard.removeObject(forKey: "preferredColorScheme")
+                UserDefaults.standard.removeObject(forKey: userKey("preferredColorScheme"))
             }
         }
     }
     
     private init() {
         // Load profile picture
-        if let data = UserDefaults.standard.data(forKey: "profileImageData") {
+        if let data = UserDefaults.standard.data(forKey: userKey("profileImageData")) {
             self.profileImageData = data
         }
         
         // Load message color
-        self.messageBubbleColor = UserPreferences.loadColor(key: "messageBubbleColor") ?? .blue
+        self.messageBubbleColor = self.loadColor(key: "messageBubbleColor") ?? .blue
         
         // Load dark mode preference
-        if let schemeString = UserDefaults.standard.string(forKey: "preferredColorScheme") {
+        if let schemeString = UserDefaults.standard.string(forKey: userKey("preferredColorScheme")) {
             self.preferredColorScheme = schemeString == "dark" ? .dark : .light
         } else {
             self.preferredColorScheme = nil // System default
+        }
+    }
+    
+    // Helper to create user-specific keys
+    private func userKey(_ key: String) -> String {
+        if let userId = UserDefaults.standard.string(forKey: "userId") {
+            return "\(userId)_\(key)"
+        }
+        return key // Fallback to global key
+    }
+    
+    // Reload preferences when user logs in
+    func reloadForCurrentUser() {
+        // Reload profile picture
+        if let data = UserDefaults.standard.data(forKey: userKey("profileImageData")) {
+            self.profileImageData = data
+        } else {
+            self.profileImageData = nil
+        }
+        
+        // Reload message color
+        self.messageBubbleColor = self.loadColor(key: "messageBubbleColor") ?? .blue
+        
+        // Reload dark mode preference
+        if let schemeString = UserDefaults.standard.string(forKey: userKey("preferredColorScheme")) {
+            self.preferredColorScheme = schemeString == "dark" ? .dark : .light
+        } else {
+            self.preferredColorScheme = nil
         }
     }
     
@@ -67,14 +95,14 @@ class UserPreferences: ObservableObject {
                 "alpha": components.count == 4 ? Double(components[3]) : 1.0
             ]
             if let data = try? JSONEncoder().encode(colorData) {
-                UserDefaults.standard.set(data, forKey: key)
+                UserDefaults.standard.set(data, forKey: userKey(key))
             }
         }
     }
     
-    // Load color from UserDefaults
-    private static func loadColor(key: String) -> Color? {
-        guard let data = UserDefaults.standard.data(forKey: key),
+    // Load color from UserDefaults with user-specific key
+    private func loadColor(key: String) -> Color? {
+        guard let data = UserDefaults.standard.data(forKey: userKey(key)),
               let colorData = try? JSONDecoder().decode([String: Double].self, from: data),
               let red = colorData["red"],
               let green = colorData["green"],

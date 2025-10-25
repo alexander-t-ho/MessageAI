@@ -523,43 +523,14 @@ struct ChatView: View {
             }
             
             ToolbarItem(placement: .principal) {
-                Button(action: {
+                ChatHeaderView(
+                    conversation: conversation,
+                    userPresence: webSocketService.userPresence,
+                    currentUserId: currentUserId
+                )
+                .onTapGesture {
                     if conversation.isGroupChat {
                         showGroupDetails = true
-                    }
-                }) {
-                    HStack(spacing: 6) {
-                        VStack(spacing: 2) {
-                            Text(displayName)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            
-                            // Show member count for group chats
-                            if conversation.isGroupChat {
-                                Text("\(conversation.participantIds.count) members")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                        presenceDot
-                        
-                        // Chevron indicator for group chats
-                        if conversation.isGroupChat {
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-                .contentShape(Rectangle())
-                .contextMenu {
-                    if conversation.isGroupChat {
-                        Label("Group Details", systemImage: "info.circle")
-                    } else if isPeerOnline {
-                        Label("Active", systemImage: "circle.fill")
-                    } else {
-                        Label("Offline", systemImage: "circle")
                     }
                 }
             }
