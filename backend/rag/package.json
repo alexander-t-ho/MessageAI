@@ -1,0 +1,20 @@
+{
+  "name": "messageai-rag-slang",
+  "version": "1.0.0",
+  "description": "RAG pipeline for slang detection with vector database",
+  "main": "rag-slang.js",
+  "scripts": {
+    "ingest": "node ingest-slang.js",
+    "test": "node test-rag.js",
+    "deploy": "./deploy-rag.sh"
+  },
+  "dependencies": {
+    "@pinecone-database/pinecone": "^1.1.0",
+    "@aws-sdk/client-secrets-manager": "^3.450.0",
+    "@aws-sdk/client-lambda": "^3.450.0",
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.450.0",
+    "openai": "^4.20.0"
+  },
+  "author": "Alex Ho",
+  "license": "ISC"
+}

@@ -1,0 +1,214 @@
+{
+  "slang_terms": [
+    {
+      "term": "rizz",
+      "definition": "Charisma or charm, especially in romantic contexts. Someone with 'rizz' is smooth and good at flirting.",
+      "usage": "He's got rizz with the ladies",
+      "origin": "Shortened from 'charisma', popularized by Twitch streamer Kai Cenat in 2022",
+      "category": "gen_z",
+      "year": "2022",
+      "examples": ["Bro has major rizz", "Rizz them up", "She got no rizz"],
+      "synonyms": ["game", "charm", "charisma", "smooth"]
+    },
+    {
+      "term": "no cap",
+      "definition": "No lie, for real, being truthful. Used to emphasize that you're being honest.",
+      "usage": "That was fire, no cap",
+      "origin": "AAVE (African American Vernacular English), became mainstream via rap music",
+      "category": "internet",
+      "year": "2017",
+      "examples": ["No cap, that's the best pizza", "She's talented, no cap", "This is facts, no cap"],
+      "synonyms": ["fr", "for real", "honestly", "frfr"]
+    },
+    {
+      "term": "bussin",
+      "definition": "Really good, amazing, excellent. Typically used to describe delicious food or something that exceeds expectations.",
+      "usage": "This food is bussin",
+      "origin": "AAVE, popularized on TikTok in 2020-2021",
+      "category": "gen_z",
+      "year": "2020",
+      "examples": ["These wings bussin bussin", "The party was bussin", "That outfit bussin fr"],
+      "synonyms": ["fire", "slaps", "hits", "banging"]
+    },
+    {
+      "term": "slay",
+      "definition": "To do something exceptionally well, to look amazing, or to dominate. Used as encouragement or praise.",
+      "usage": "She absolutely slayed that performance",
+      "origin": "LGBTQ+ ballroom culture, mainstream via RuPaul's Drag Race",
+      "category": "gen_z",
+      "year": "2015",
+      "examples": ["Slay queen!", "You're slaying that outfit", "Go slay!"],
+      "synonyms": ["kill it", "crush it", "nail it", "ate"]
+    },
+    {
+      "term": "mid",
+      "definition": "Mediocre, average, not impressive. Used to express disappointment or that something is just okay.",
+      "usage": "That movie was mid, honestly",
+      "origin": "Gaming/internet culture, became mainstream on TikTok",
+      "category": "gen_z",
+      "year": "2021",
+      "examples": ["The food was mid", "His performance was mid", "That's mid at best"],
+      "synonyms": ["mediocre", "average", "meh", "mid-tier"]
+    },
+    {
+      "term": "stan",
+      "definition": "To be an extremely devoted fan of someone or something. Can be used as a noun or verb.",
+      "usage": "I stan Taylor Swift",
+      "origin": "From Eminem's 2000 song 'Stan' about an obsessed fan",
+      "category": "internet",
+      "year": "2000",
+      "examples": ["We stan a queen", "Taylor Swift stans", "I'm a stan"],
+      "synonyms": ["superfan", "devoted fan", "fanatic"]
+    },
+    {
+      "term": "ghosting",
+      "definition": "Suddenly cutting off all communication with someone without explanation, typically in dating contexts.",
+      "usage": "He ghosted me after three dates",
+      "origin": "Online dating culture, early 2010s",
+      "category": "dating",
+      "year": "2014",
+      "examples": ["She ghosted me on Tinder", "Don't ghost people", "I got ghosted again"],
+      "synonyms": ["disappear", "vanish", "go silent"]
+    },
+    {
+      "term": "situationship",
+      "definition": "An undefined romantic relationship that's more than friendship but less than an official relationship.",
+      "usage": "We're in a situationship, not dating",
+      "origin": "Dating culture, popularized on social media",
+      "category": "dating",
+      "year": "2017",
+      "examples": ["It's just a situationship", "Stuck in a situationship", "Define the situationship"],
+      "synonyms": ["undefined relationship", "talking stage", "complicated"]
+    },
+    {
+      "term": "fr",
+      "definition": "Abbreviation for 'for real', used to agree or emphasize truthfulness.",
+      "usage": "That's crazy, fr",
+      "origin": "Text messaging abbreviation",
+      "category": "internet",
+      "year": "2015",
+      "examples": ["Fr fr", "That's facts fr", "You're right fr"],
+      "synonyms": ["for real", "frfr", "no cap"]
+    },
+    {
+      "term": "ngl",
+      "definition": "Abbreviation for 'not gonna lie', used before sharing an honest opinion.",
+      "usage": "Ngl, that was pretty good",
+      "origin": "Text messaging/social media abbreviation",
+      "category": "internet",
+      "year": "2016",
+      "examples": ["Ngl this is fire", "Ngl I'm tired", "Ngl you're right"],
+      "synonyms": ["honestly", "to be honest", "tbh"]
+    },
+    {
+      "term": "iykyk",
+      "definition": "Abbreviation for 'if you know, you know'. Suggests insider knowledge or that something is self-evident to those in the know.",
+      "usage": "The vibes were immaculate, iykyk",
+      "origin": "Social media, particularly Instagram",
+      "category": "internet",
+      "year": "2018",
+      "examples": ["That feeling when iykyk", "Real ones know iykyk", "iykyk 😏"],
+      "synonyms": ["insider knowledge", "you know", "self-explanatory"]
+    },
+    {
+      "term": "periodt",
+      "definition": "Emphatic version of 'period', used to strongly emphasize a statement with no room for debate.",
+      "usage": "She's the best, periodt",
+      "origin": "AAVE, popularized by Black Twitter and TikTok",
+      "category": "internet",
+      "year": "2019",
+      "examples": ["That's facts, periodt", "End of discussion, periodt", "She won, periodt"],
+      "synonyms": ["period", "end of story", "that's final"]
+    },
+    {
+      "term": "vibe check",
+      "definition": "Assessing the mood, atmosphere, or energy of a person, place, or situation.",
+      "usage": "Let me do a vibe check on this party",
+      "origin": "Internet meme culture, TikTok",
+      "category": "gen_z",
+      "year": "2019",
+      "examples": ["Vibe check: are you okay?", "This place passed the vibe check", "Vibe check failed"],
+      "synonyms": ["mood check", "energy check", "atmosphere assessment"]
+    },
+    {
+      "term": "fire",
+      "definition": "Excellent, amazing, hot, or impressive. Used to describe something of high quality.",
+      "usage": "That song is fire",
+      "origin": "Hip-hop culture, 1990s-2000s",
+      "category": "general",
+      "year": "1995",
+      "examples": ["Your fit is fire", "This beat is fire", "That's fire bro"],
+      "synonyms": ["lit", "flames", "hot", "amazing"]
+    },
+    {
+      "term": "lit",
+      "definition": "Exciting, excellent, or awesome. Can describe parties, music, or anything exciting.",
+      "usage": "That party was lit",
+      "origin": "Hip-hop culture, became mainstream 2010s",
+      "category": "general",
+      "year": "2014",
+      "examples": ["This song is lit", "The vibes are lit", "It's gonna be lit"],
+      "synonyms": ["fire", "turnt", "crazy", "wild"]
+    },
+    {
+      "term": "cap",
+      "definition": "A lie or something false. 'Capping' means lying.",
+      "usage": "You're capping right now",
+      "origin": "AAVE, opposite of 'no cap'",
+      "category": "internet",
+      "year": "2017",
+      "examples": ["That's cap", "Stop capping", "Why you capping?"],
+      "synonyms": ["lie", "false", "bs", "fake"]
+    },
+    {
+      "term": "bet",
+      "definition": "Okay, sure, sounds good, I agree. Used to confirm or acknowledge something.",
+      "usage": "Wanna go to the movies? Bet.",
+      "origin": "AAVE, mainstream via rap culture",
+      "category": "general",
+      "year": "2010",
+      "examples": ["Bet, I'm down", "Bet that's cool", "Alright bet"],
+      "synonyms": ["okay", "sure", "sounds good", "alright"]
+    },
+    {
+      "term": "flex",
+      "definition": "To show off or boast, typically about possessions, achievements, or status.",
+      "usage": "Stop flexing your new car",
+      "origin": "Hip-hop culture, 2000s",
+      "category": "general",
+      "year": "2005",
+      "examples": ["Weird flex but okay", "Flexing on the gram", "He's flexing"],
+      "synonyms": ["show off", "boast", "brag", "stunt"]
+    },
+    {
+      "term": "simp",
+      "definition": "Someone who does too much for someone they like, often seeking attention or approval.",
+      "usage": "He's simping for her",
+      "origin": "Internet culture, became viral 2019-2020",
+      "category": "internet",
+      "year": "2019",
+      "examples": ["Stop simping", "That's simp behavior", "Don't be a simp"],
+      "synonyms": ["try-hard", "desperate", "over-eager"]
+    },
+    {
+      "term": "lowkey",
+      "definition": "Secretly, subtly, or to a small extent. Something you don't want to advertise.",
+      "usage": "I lowkey want pizza",
+      "origin": "AAVE, mainstream via social media",
+      "category": "general",
+      "year": "2015",
+      "examples": ["Lowkey tired", "I lowkey agree", "That's lowkey fire"],
+      "synonyms": ["kinda", "secretly", "subtly", "somewhat"]
+    },
+    {
+      "term": "highkey",
+      "definition": "Openly, obviously, or very much. Opposite of lowkey.",
+      "usage": "I highkey love this",
+      "origin": "AAVE, contrast to 'lowkey'",
+      "category": "general",
+      "year": "2016",
+      "examples": ["Highkey obsessed", "That's highkey amazing", "Highkey agree"],
+      "synonyms": ["definitely", "obviously", "really", "very"]
+    }
+  ]
+}
