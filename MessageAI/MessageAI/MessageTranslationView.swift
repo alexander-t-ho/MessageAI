@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct MessageTranslationView: View {
     let message: MessageData
