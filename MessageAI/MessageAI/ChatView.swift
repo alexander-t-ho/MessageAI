@@ -15,6 +15,7 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var webSocketService: WebSocketService
+    @StateObject private var aiService = AITranslationService.shared
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @Query private var pendingAll: [PendingMessageData]
@@ -337,6 +338,17 @@ struct ChatView: View {
                 .background(Color(.systemGray6))
             }
             
+            // Smart Reply View - AI-powered quick replies
+            if visibleMessages.count > 2 {
+                SmartReplyView(
+                    messageText: $messageText,
+                    conversation: conversation,
+                    messages: visibleMessages
+                )
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+            }
+            
             // Input bar
             HStack(spacing: 12) {
                 TextField("Message", text: $messageText, axis: .vertical)
@@ -397,6 +409,12 @@ struct ChatView: View {
             .background(Color(.systemBackground))
         }
         .onAppear {
+            // Initialize AI Translation Service with auth token
+            if let token = UserDefaults.standard.string(forKey: "accessToken") {
+                aiService.setAuthToken(token)
+                print("🌍 AI Translation Service initialized")
+            }
+            
             // Set currently viewed conversation
             webSocketService.currentlyViewedConversationId = conversation.id
             print("👁️ Now viewing conversation: \(conversation.id)")
@@ -1514,6 +1532,30 @@ struct MessageBubble: View {
                     .padding(.top, 4)
                 }
                     } // End of VStack
+                    
+                    // Translation display - show below message if available
+                    if let translation = AITranslationService.shared.translations[message.id],
+                       !isFromCurrentUser {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.turn.down.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.blue)
+                                Text("Translated to \(AITranslationService.shared.preferredLanguage.displayName)")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.top, 4)
+                            
+                            Text(translation.translatedText ?? message.content)
+                                .font(.callout)
+                                .foregroundColor(.primary)
+                                .padding(12)
+                                .background(Color.blue.opacity(0.05))
+                                .cornerRadius(12)
+                        }
+                        .padding(.top, 4)
+                    }
                 } // End of ZStack
                 .offset(x: swipeOffset)
                 // force view refresh when status updates tick changes so latest read attaches correctly
@@ -1567,6 +1609,22 @@ struct MessageBubble: View {
                 )
                 .animation(.easeInOut(duration: 0.2), value: swipeOffset)
                 .contextMenu {
+                    // Translation options - only for incoming messages
+                    if !isFromCurrentUser && !message.isDeleted {
+                        Button(action: { 
+                            Task {
+                                await AITranslationService.shared.translateMessage(
+                                    message.content,
+                                    messageId: message.id
+                                )
+                            }
+                        }) {
+                            Label("Translate", systemImage: "globe")
+                        }
+                        
+                        Divider()
+                    }
+                    
                     // Edit option - only for sender's own messages
                     if isFromCurrentUser && !message.isDeleted {
                         Button(action: onEdit) {
