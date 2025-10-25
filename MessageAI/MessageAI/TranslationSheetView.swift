@@ -5,10 +5,12 @@ struct TranslationSheetView: View {
     let message: MessageData
     let translationType: TranslationType
     @StateObject private var aiService = AITranslationService.shared
+    @EnvironmentObject var webSocketService: WebSocketService
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = false
     @State private var translation: TranslationResult?
     @State private var culturalHints: [CulturalHint] = []
+    @State private var loadingTimer: Timer?
     
     enum TranslationType {
         case translate
@@ -276,6 +278,18 @@ struct TranslationSheetView: View {
             .task {
                 await loadData()
             }
+            .onChange(of: aiService.culturalHints[message.id]) { oldValue, newValue in
+                // Update local state when slang explanation arrives via WebSocket
+                if let hints = newValue {
+                    culturalHints = hints
+                    isLoading = false
+                    loadingTimer?.invalidate()
+                    print("✅ UI updated with \(hints.count) slang hints")
+                }
+            }
+            .onDisappear {
+                loadingTimer?.invalidate()
+            }
         }
     }
     
@@ -286,28 +300,49 @@ struct TranslationSheetView: View {
         case .translate:
             await aiService.translateMessage(message.content, messageId: message.id)
             translation = aiService.translations[message.id]
+            isLoading = false
             
         case .explainSlang:
-            await aiService.getCulturalContext(
+            // Request via WebSocket
+            aiService.getCulturalContext(
                 for: message.content,
                 targetLang: aiService.preferredLanguage,
-                messageId: message.id
+                messageId: message.id,
+                webSocketService: webSocketService
             )
-            culturalHints = aiService.culturalHints[message.id] ?? []
+            
+            // Wait for response (with timeout)
+            startLoadingTimeout()
             
         case .both:
             await aiService.translateMessage(message.content, messageId: message.id)
             translation = aiService.translations[message.id]
             
-            await aiService.getCulturalContext(
+            // Request slang via WebSocket
+            aiService.getCulturalContext(
                 for: message.content,
                 targetLang: aiService.preferredLanguage,
-                messageId: message.id
+                messageId: message.id,
+                webSocketService: webSocketService
             )
-            culturalHints = aiService.culturalHints[message.id] ?? []
+            
+            // Wait for response (with timeout)
+            startLoadingTimeout()
         }
-        
-        isLoading = false
+    }
+    
+    private func startLoadingTimeout() {
+        // Set a 10-second timeout for loading
+        loadingTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { _ in
+            if aiService.culturalHints[message.id] != nil {
+                culturalHints = aiService.culturalHints[message.id] ?? []
+                isLoading = false
+            } else {
+                // Timeout - stop loading
+                isLoading = false
+                print("⏱️ Slang explanation timeout")
+            }
+        }
     }
     
     private func copyAll() {

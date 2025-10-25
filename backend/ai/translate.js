@@ -14,19 +14,19 @@ const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION 
 const TRANSLATIONS_CACHE_TABLE = process.env.TRANSLATIONS_CACHE_TABLE || "TranslationsCache_AlexHo";
 const CACHE_TTL_HOURS = 24 * 7; // Cache for 1 week
 
-// Get Claude API key from AWS Secrets Manager
-async function getClaudeApiKey() {
+// Get OpenAI API key from AWS Secrets Manager
+async function getOpenAIApiKey() {
   try {
     const response = await secretsClient.send(
       new GetSecretValueCommand({
-        SecretId: "claude-api-key-alexho",
+        SecretId: "openai-api-key-alexho",
         VersionStage: "AWSCURRENT",
       })
     );
     const secret = JSON.parse(response.SecretString);
     return secret.apiKey;
   } catch (error) {
-    console.error("[translate] Error getting Claude API key:", error);
+    console.error("[translate] Error getting OpenAI API key:", error);
     throw new Error("Failed to retrieve API key");
   }
 }
@@ -199,12 +199,30 @@ Important: Only include terms that might confuse someone unfamiliar with youth/i
 
 Text to analyze: "${text}"`;
 
-  const claudeResponse = await callClaude(apiKey, [
-    { role: 'user', content: prompt }
-  ]);
+  // Call OpenAI instead of Claude
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4-turbo-preview',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' }
+    })
+  });
+
+  if (!response.ok) {
+    console.error('[cultural] OpenAI API error:', response.status);
+    return { hasContext: false, hints: [] };
+  }
 
   try {
-    const result = JSON.parse(claudeResponse.content[0].text);
+    const openaiResult = await response.json();
+    const result = JSON.parse(openaiResult.choices[0].message.content);
     await storeCache(cacheKey, { culturalHints: result });
     return result;
   } catch (parseError) {
@@ -288,7 +306,7 @@ exports.handler = async (event) => {
     const { action, text, targetLang, sourceLang, desiredLevel, conversationContext } = body;
     
     // Get API key
-    const apiKey = await getClaudeApiKey();
+    const apiKey = await getOpenAIApiKey();
     
     let result;
     

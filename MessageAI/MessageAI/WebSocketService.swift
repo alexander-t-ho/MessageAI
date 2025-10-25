@@ -753,6 +753,33 @@ class WebSocketService: ObservableObject {
                 print("👥 Group member left notification received")
                 groupMemberLeftEvents.append(memberData)
             }
+        } else if let type = json["type"] as? String, type == "slang_explanation",
+                  let messageId = json["messageId"] as? String,
+                  let data = json["data"] as? [String: Any] {
+            // Handle slang explanation response
+            Task { @MainActor in
+                print("💡 Slang explanation received for message: \(messageId)")
+                if let hasContext = data["hasContext"] as? Bool, hasContext,
+                   let hintsData = data["hints"] as? [[String: Any]] {
+                    // Convert to CulturalHint objects and store in AITranslationService
+                    var hints: [CulturalHint] = []
+                    for hintDict in hintsData {
+                        if let phrase = hintDict["phrase"] as? String,
+                           let explanation = hintDict["explanation"] as? String,
+                           let actualMeaning = hintDict["actualMeaning"] as? String {
+                            let hint = CulturalHint(
+                                phrase: phrase,
+                                explanation: explanation,
+                                literalMeaning: hintDict["literalMeaning"] as? String ?? "",
+                                actualMeaning: actualMeaning
+                            )
+                            hints.append(hint)
+                        }
+                    }
+                    AITranslationService.shared.culturalHints[messageId] = hints
+                    print("✅ Stored \(hints.count) slang hints for message: \(messageId)")
+                }
+            }
         } else {
                     print("⚠️ Unknown message format: \(json)")
                 }
@@ -909,6 +936,30 @@ class WebSocketService: ObservableObject {
         } else if reconnectAttempt >= maxReconnectAttempts {
             print("❌ Max reconnection attempts reached")
             connectionState = .disconnected
+        }
+    }
+    
+    // MARK: - AI Features
+    
+    func requestSlangExplanation(message: String, messageId: String, targetLang: String = "en") {
+        print("💡 Requesting slang explanation for message: \(messageId), language: \(targetLang)")
+        
+        let payload: [String: Any] = [
+            "action": "explainSlang",
+            "message": message,
+            "messageId": messageId,
+            "targetLang": targetLang
+        ]
+        
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: data, encoding: .utf8) {
+            webSocketTask?.send(.string(json)) { error in
+                if let error = error {
+                    print("❌ Slang explanation request error: \(error.localizedDescription)")
+                } else {
+                    print("✅ Slang explanation requested via WebSocket")
+                }
+            }
         }
     }
     

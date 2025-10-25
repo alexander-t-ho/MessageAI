@@ -212,22 +212,14 @@ class AITranslationService: ObservableObject {
         }
     }
     
-    func getCulturalContext(for text: String, targetLang: SupportedLanguage, messageId: String) async {
-        do {
-            let result = try await makeAPIRequest(
-                action: "cultural_context",
-                text: text,
-                targetLang: targetLang.rawValue,
-                sourceLang: detectLanguage(text)
-            )
-            
-            if let hints = result?.hints {
-                culturalHints[messageId] = hints
-                print("🎯 Got cultural hints for \(messageId) in \(targetLang.displayName): \(hints.count) terms")
-            }
-        } catch {
-            print("Cultural context error: \(error)")
-        }
+    func getCulturalContext(for text: String, targetLang: SupportedLanguage, messageId: String, webSocketService: WebSocketService) {
+        // Request via WebSocket (no await needed - response comes async)
+        webSocketService.requestSlangExplanation(
+            message: text,
+            messageId: messageId,
+            targetLang: targetLang.rawValue
+        )
+        print("🎯 Requesting cultural hints for \(messageId) in \(targetLang.displayName)")
     }
     
     func adjustFormality(text: String, to level: String) async -> String? {
