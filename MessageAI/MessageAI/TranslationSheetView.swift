@@ -28,48 +28,72 @@ struct TranslationSheetView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    originalMessageSection
-                    Divider()
-                    
-                    if translationType == .translate || translationType == .both {
-                        translationSection
-                    }
-                    
-                    if translationType == .explainSlang || translationType == .both {
-                        slangSection
-                    }
-                    
-                    poweredBySection
+            contentView
+                .navigationTitle(navigationTitle)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    toolbarContent
                 }
-                .padding(.vertical)
-            }
-            .navigationTitle(navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") { dismiss() }.fontWeight(.medium)
+                .task {
+                    await loadData()
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: copyAll) {
-                        Image(systemName: "doc.on.doc")
-                    }
+                .onChange(of: aiService.culturalHints[message.id]) { oldValue, newValue in
+                    handleHintsChange(newValue)
                 }
-            }
-            .task {
-                await loadData()
-            }
-            .onChange(of: aiService.culturalHints[message.id]) { oldValue, newValue in
-                if let hints = newValue {
-                    culturalHints = hints
-                    isLoading = false
+                .onChange(of: aiService.translations[message.id]) { oldValue, newValue in
+                    handleTranslationChange(newValue)
+                }
+                .onDisappear {
                     loadingTimer?.invalidate()
                 }
+        }
+    }
+    
+    @ViewBuilder
+    private var contentView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                originalMessageSection
+                Divider()
+                
+                if translationType == .translate || translationType == .both {
+                    translationSection
+                }
+                
+                if translationType == .explainSlang || translationType == .both {
+                    slangSection
+                }
+                
+                poweredBySection
             }
-            .onDisappear {
-                loadingTimer?.invalidate()
+            .padding(.vertical)
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("Done") { dismiss() }.fontWeight(.medium)
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: copyAll) {
+                Image(systemName: "doc.on.doc")
             }
+        }
+    }
+    
+    private func handleHintsChange(_ newValue: [CulturalHint]?) {
+        if let hints = newValue {
+            culturalHints = hints
+            isLoading = false
+            loadingTimer?.invalidate()
+        }
+    }
+    
+    private func handleTranslationChange(_ newValue: TranslationResult?) {
+        if let trans = newValue {
+            translation = trans
+            isLoading = false
         }
     }
     
@@ -358,9 +382,7 @@ struct TranslationSheetView: View {
             startLoadingTimeout()
             
         case .both:
-            await aiService.translateMessage(message.content, messageId: message.id)
-            translation = aiService.translations[message.id]
-            
+            // WebSocket will return BOTH translation and slang in one response
             aiService.getCulturalContext(
                 for: message.content,
                 targetLang: aiService.preferredLanguage,

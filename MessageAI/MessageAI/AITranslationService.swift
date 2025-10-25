@@ -20,7 +20,7 @@ struct TranslationResponse: Codable {
     let error: String?
 }
 
-struct TranslationResult: Codable {
+struct TranslationResult: Codable, Equatable {
     // For translate action
     let translatedText: String?
     let detectedLanguage: String?
@@ -47,7 +47,7 @@ struct CulturalHint: Codable, Equatable {
     let actualMeaning: String
 }
 
-struct SmartReply: Codable {
+struct SmartReply: Codable, Equatable {
     let text: String
     let tone: String
     let intent: String
@@ -150,7 +150,7 @@ class AITranslationService: ObservableObject {
         if let url = Bundle.main.object(forInfoDictionaryKey: "API_GATEWAY_URL") as? String {
             self.apiEndpoint = "\(url)/translate"
         } else {
-            self.apiEndpoint = "https://bnbr75tld0.execute-api.us-east-1.amazonaws.com/translate"
+            self.apiEndpoint = "https://bnbr75tld0.execute-api.us-east-1.amazonaws.com/production/translate"
         }
         
         // Load preferences from UserDefaults

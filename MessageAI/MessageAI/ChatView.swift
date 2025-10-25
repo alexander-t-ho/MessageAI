@@ -1616,14 +1616,6 @@ struct MessageBubble: View {
                 .contextMenu {
                     // AI Understanding options - only for incoming messages
                     if !isFromCurrentUser && !message.isDeleted {
-                        Button(action: onTranslate) {
-                            Label("Translate", systemImage: "globe")
-                        }
-                        
-                        Button(action: onExplainSlang) {
-                            Label("Explain Slang", systemImage: "lightbulb.fill")
-                        }
-                        
                         Button(action: onTranslateAndExplain) {
                             Label("Translate & Explain", systemImage: "sparkles")
                         }
