@@ -16,6 +16,7 @@ struct ChatView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var webSocketService: WebSocketService
     @StateObject private var aiService = AITranslationService.shared
+    @StateObject private var preferences = UserPreferences.shared
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @Query private var pendingAll: [PendingMessageData]
@@ -310,6 +311,16 @@ struct ChatView: View {
                     // Clear current conversation ID to allow notifications
                     UserDefaults.standard.removeObject(forKey: "currentConversationId")
                     print("📍 Cleared currentConversationId - notifications will show")
+                    
+                    // Force badge count recalculation on dismiss
+                    let descriptor = FetchDescriptor<ConversationData>(
+                        predicate: #Predicate { $0.isDeleted == false }
+                    )
+                    if let allConversations = try? modelContext.fetch(descriptor) {
+                        let totalUnread = allConversations.reduce(0) { $0 + $1.unreadCount }
+                        NotificationManager.shared.setBadgeCount(totalUnread)
+                        print("🔔 Badge recalculated on dismiss: \(totalUnread)")
+                    }
                 }
             }
             // Check if conversation still exists
@@ -1495,7 +1506,7 @@ struct MessageBubble: View {
                         Text(message.content)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                            .background(isFromCurrentUser ? preferences.messageBubbleColor : Color(.systemGray5))
                             .foregroundColor(isFromCurrentUser ? .white : .primary)
                             .cornerRadius(20)
                         

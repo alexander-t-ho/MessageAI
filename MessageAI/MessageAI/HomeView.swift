@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var preferences = UserPreferences.shared
     @State private var selectedTab = 0
     
     var body: some View {
@@ -29,6 +30,7 @@ struct HomeView: View {
                 }
                 .tag(1)
         }
+        .preferredColorScheme(preferences.preferredColorScheme)
     }
 }
 
@@ -37,8 +39,10 @@ struct HomeView: View {
 struct ProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var aiService = AITranslationService.shared
+    @StateObject private var preferences = UserPreferences.shared
     @State private var showDatabaseTest = false
     @State private var showLanguagePreferences = false
+    @State private var showCustomization = false
     
     var body: some View {
         NavigationStack {
@@ -47,14 +51,30 @@ struct ProfileView: View {
                 Section {
                     if let user = authViewModel.currentUser {
                         HStack {
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 60, height: 60)
-                                .overlay(
-                                    Text(user.name.prefix(1).uppercased())
-                                        .font(.title)
-                                        .foregroundColor(.white)
-                                )
+                            // Profile picture or initial
+                            Group {
+                                if let imageData = preferences.profileImageData,
+                                   let uiImage = UIImage(data: imageData) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 60, height: 60)
+                                        .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(preferences.messageBubbleColor)
+                                        .frame(width: 60, height: 60)
+                                        .overlay(
+                                            Text(user.name.prefix(1).uppercased())
+                                                .font(.title)
+                                                .foregroundColor(.white)
+                                        )
+                                }
+                            }
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 2)
+                            )
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(user.name)
@@ -162,6 +182,31 @@ struct ProfileView: View {
                     Text("AI Features")
                 }
                 
+                // Customization Section
+                Section {
+                    Button(action: { showCustomization = true }) {
+                        HStack {
+                            Image(systemName: "paintbrush.fill")
+                                .foregroundColor(.purple)
+                            Text("Customize Profile")
+                            Spacer()
+                            
+                            // Preview circle with current color
+                            Circle()
+                                .fill(preferences.messageBubbleColor)
+                                .frame(width: 24, height: 24)
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                } header: {
+                    Text("Personalization")
+                } footer: {
+                    Text("Profile picture, message color, and theme")
+                }
+                
                 // Phase Progress Section
                 Section {
                     ProgressRow(icon: "checkmark.circle.fill", text: "Authentication", status: .complete, color: .green)
@@ -214,6 +259,10 @@ struct ProfileView: View {
             .sheet(isPresented: $showLanguagePreferences) {
                 LanguagePreferencesView()
             }
+            .sheet(isPresented: $showCustomization) {
+                ProfileCustomizationView()
+            }
+            .preferredColorScheme(preferences.preferredColorScheme)
             .onAppear {
                 // Set auth token for AI service when profile loads
                 if let token = UserDefaults.standard.string(forKey: "accessToken") {
