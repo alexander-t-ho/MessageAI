@@ -78,6 +78,15 @@ struct ChatHeaderView: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
+            .sheet(isPresented: $showNicknameEditor) {
+                if let uid = otherUserId {
+                    EditNicknameView(
+                        userId: uid,
+                        currentName: otherUserName,
+                        isPresented: $showNicknameEditor
+                    )
+                }
+            }
         } else {
             // Group chat header
             Button(action: {
@@ -95,13 +104,6 @@ struct ChatHeaderView: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
-            .sheet(isPresented: $showNicknameEditor) {
-                EditNicknameView(
-                    userId: userId,
-                    currentName: otherUserName,
-                    isPresented: $showNicknameEditor
-                )
-            }
         }
     }
 }
