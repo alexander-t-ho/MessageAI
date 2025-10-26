@@ -1,0 +1,16 @@
+{
+  "name": "cloudy-voice-lambdas",
+  "version": "1.0.0",
+  "description": "AWS Lambda functions for Cloudy voice messages",
+  "main": "generateUploadUrl.js",
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/s3-request-presigner": "^3.450.0"
+  },
+  "author": "Alex Ho",
+  "license": "ISC"
+}
+
