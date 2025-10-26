@@ -675,6 +675,14 @@ class WebSocketService: ObservableObject {
                     print("   From: \(payload.senderName)")
                     print("   Content: \(payload.content)")
                     
+                    // Log voice message details if present
+                    if let messageType = payload.messageType, messageType == "voice" {
+                        print("🎤 Voice message received:")
+                        print("   Audio URL: \(payload.audioUrl ?? "nil")")
+                        print("   Duration: \(payload.audioDuration ?? 0)s")
+                        print("   Transcript: \(payload.transcript ?? "none")")
+                    }
+                    
                     // Add to received messages
                     receivedMessages.append(payload)
                     

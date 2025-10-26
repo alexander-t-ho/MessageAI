@@ -77,31 +77,44 @@ exports.handler = async (event) => {
       const actualMessageId = m.originalMessageId || m.messageId;
       
       console.log(`  - Message ${actualMessageId} from ${m.senderName} in conversation ${m.conversationId}${m.isGroupChat ? ' (GROUP)' : ''}`);
+      
+      // Log voice message details if present
+      if (m.messageType === 'voice') {
+        console.log(`🎤 Voice message being delivered via catchUp:`);
+        console.log(`   Audio URL: ${m.audioUrl || 'nil'}`);
+        console.log(`   Duration: ${m.audioDuration || 0}s`);
+        console.log(`   Transcript: ${m.transcript || 'none'}`);
+      }
+      
+      const messagePayload = {
+        type: "message",
+        data: {
+          messageId: actualMessageId,
+          conversationId: m.conversationId,
+          senderId: m.senderId,
+          senderName: m.senderName,
+          content: m.content,
+          timestamp: m.timestamp,
+          status: "delivered",
+          replyToMessageId: m.replyToMessageId || null,
+          replyToContent: m.replyToContent || null,
+          replyToSenderName: m.replyToSenderName || null,
+          isEdited: m.isEdited || false,
+          editedAt: m.editedAt || null,
+          // Voice message fields
+          messageType: m.messageType || null,
+          audioUrl: m.audioUrl || null,
+          audioDuration: m.audioDuration || null,
+          transcript: m.transcript || null,
+          isTranscribing: m.isTranscribing || false,
+        },
+      };
+      
+      console.log(`📤 Sending catchUp message payload:`, JSON.stringify(messagePayload, null, 2));
+      
       await api.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
-        Data: Buffer.from(JSON.stringify({
-          type: "message",
-          data: {
-            messageId: actualMessageId,
-            conversationId: m.conversationId,
-            senderId: m.senderId,
-            senderName: m.senderName,
-            content: m.content,
-            timestamp: m.timestamp,
-            status: "delivered",
-            replyToMessageId: m.replyToMessageId || null,
-            replyToContent: m.replyToContent || null,
-            replyToSenderName: m.replyToSenderName || null,
-            isEdited: m.isEdited || false,
-            editedAt: m.editedAt || null,
-            // Voice message fields
-            messageType: m.messageType || null,
-            audioUrl: m.audioUrl || null,
-            audioDuration: m.audioDuration || null,
-            transcript: m.transcript || null,
-            isTranscribing: m.isTranscribing || false,
-          },
-        })),
+        Data: Buffer.from(JSON.stringify(messagePayload)),
       }));
 
       // Mark the message as delivered in the database

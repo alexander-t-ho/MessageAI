@@ -1149,6 +1149,13 @@ struct ChatView: View {
             print("   Duration: \(duration)s")
         }
         
+        // Check if this is a voice message
+        if payload.messageType == "voice" {
+            print("🎤 VOICE MESSAGE RECEIVED - Processing as voice message")
+        } else {
+            print("📝 TEXT MESSAGE RECEIVED - Processing as text message")
+        }
+        
         // Only handle messages for this conversation
         guard payload.conversationId == conversation.id else {
             print("   ⏭️ Message is for different conversation, ignoring")
@@ -1187,6 +1194,14 @@ struct ChatView: View {
             transcript: payload.transcript,
             isTranscribing: payload.isTranscribing ?? false
         )
+        
+        // Debug the created message
+        print("📝 Created MessageData:")
+        print("   ID: \(newMessage.id)")
+        print("   Message Type: \(newMessage.messageType ?? "nil")")
+        print("   Audio URL: \(newMessage.audioUrl ?? "nil")")
+        print("   Duration: \(newMessage.audioDuration ?? 0)s")
+        print("   Content: \(newMessage.content)")
         
         // Save to database
         do {
