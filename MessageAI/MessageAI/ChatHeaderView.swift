@@ -90,7 +90,7 @@ struct ChatHeaderView: View {
         } else {
             // Group chat header
             Button(action: {
-                // Future: Show group details
+                // Show group details
             }) {
                 VStack(spacing: 2) {
                     Text(conversation.groupName ?? "Group Chat")
@@ -98,9 +98,11 @@ struct ChatHeaderView: View {
                         .lineLimit(1)
                         .foregroundColor(.primary)
                     
-                    Text("\(conversation.participantIds.count) members")
+                    // Show online members count
+                    let onlineCount = conversation.participantIds.filter { userPresence[$0] == true }.count
+                    Text("\(onlineCount) online")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(onlineCount > 0 ? .green : .secondary)
                 }
             }
             .buttonStyle(PlainButtonStyle())
