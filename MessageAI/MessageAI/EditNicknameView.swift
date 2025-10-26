@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct EditNicknameView: View {
     let userId: String
@@ -71,15 +72,8 @@ struct EditNicknameView: View {
     }
     
     private func getUserRealName() -> String {
-        // Try to get real name from stored data
-        // For now, return current name if no customization
-        let descriptor = FetchDescriptor<UserCustomizationData>(
-            predicate: #Predicate { $0.userId == userId }
-        )
-        if let _ = try? modelContext.fetch(descriptor).first?.customNickname {
-            // Has a nickname, return original from conversation
-            return currentName
-        }
+        // For now, just return current name
+        // In future, could fetch from Conversations table
         return currentName
     }
 }
