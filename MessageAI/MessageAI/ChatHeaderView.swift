@@ -45,7 +45,7 @@ struct ChatHeaderView: View {
         // User info for 1-on-1 chats
         if !conversation.isGroupChat, let userId = otherUserId {
             Button(action: {
-                showNicknameEditor = true
+                showNicknameEditor = true  // Shows full user profile
             }) {
                 HStack(spacing: 10) {
                     // Profile icon with online status halo
@@ -80,10 +80,10 @@ struct ChatHeaderView: View {
             .buttonStyle(PlainButtonStyle())
             .sheet(isPresented: $showNicknameEditor) {
                 if let uid = otherUserId {
-                    EditNicknameView(
+                    UserProfileView(
                         userId: uid,
-                        currentName: otherUserName,
-                        isPresented: $showNicknameEditor
+                        username: otherUserName,
+                        isOnline: isOnline
                     )
                 }
             }
