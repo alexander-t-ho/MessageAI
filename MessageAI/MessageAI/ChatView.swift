@@ -497,62 +497,6 @@ struct ChatView: View {
                 .onAppear {
                     typingDotsAnimation = true
                 }
-            } else if showVoicePreview, let voiceURL = recordedVoiceURL {
-                // Voice preview mode (after recording stops)
-                VStack(spacing: 8) {
-                    // Waveform (static when not recording)
-                    VoiceWaveformView(
-                        audioLevel: Float(voicePlayer.playbackProgress),
-                        isRecording: false
-                    )
-                    .frame(height: 50)
-                    
-                    HStack(spacing: 12) {
-                        // Play/Pause button
-                        Button(action: {
-                            if voicePlayer.isPlaying {
-                                voicePlayer.pause()
-                            } else {
-                                if voicePlayer.duration == 0 {
-                                    voicePlayer.loadAudio(url: voiceURL)
-                                }
-                                voicePlayer.play()
-                            }
-                        }) {
-                            Image(systemName: voicePlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(.blue)
-                        }
-                        
-                        // Duration / Progress
-                        Text("\(formatRecordingDuration(voicePlayer.currentTime)) / \(formatRecordingDuration(recordedVoiceDuration))")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        // Delete button
-                        Button(action: {
-                            cancelVoicePreview()
-                        }) {
-                            Image(systemName: "trash.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(.red)
-                        }
-                        
-                        // Send button
-                        Button(action: {
-                            sendVoiceMessageFromPreview()
-                        }) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(.blue)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .background(Color(.systemGray6))
             } else {
                 // Input bar (normal state)
                 HStack(spacing: 12) {
@@ -1676,18 +1620,18 @@ struct ChatView: View {
         let messageId = UUID().uuidString
         
         // Convert voice to text
-        voiceToTextService.transcribeAudioFile(url: audioURL) { [weak self] result in
+        voiceToTextService.transcribeAudioFile(url: audioURL) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let transcribedText):
                     print("✅ Voice transcribed successfully: \(transcribedText)")
-                    self?.sendTranscribedText(transcribedText: transcribedText, messageId: messageId)
+                    sendTranscribedText(transcribedText: transcribedText, messageId: messageId)
                 case .failure(let error):
                     print("❌ Voice transcription failed: \(error)")
                     // Fallback to placeholder text
-                    self?.sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
+                    sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
                 }
-                self?.cleanupVoiceRecording()
+                cleanupVoiceRecording()
             }
         }
     }
