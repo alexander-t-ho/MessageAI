@@ -13,6 +13,7 @@ struct ChatHeaderView: View {
     let currentUserId: String
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @State private var showNicknameEditor = false
     
     private var otherUserId: String? {
         conversation.participantIds.first(where: { $0 != currentUserId })
@@ -44,17 +45,16 @@ struct ChatHeaderView: View {
         // User info for 1-on-1 chats
         if !conversation.isGroupChat, let userId = otherUserId {
             Button(action: {
-                // Future: Show user profile details
+                showNicknameEditor = true
             }) {
                 HStack(spacing: 10) {
                     // Profile icon with online status halo
                     ZStack {
-                        // Online status halo behind profile
+                        // Online status halo behind profile (solid, more visible)
                         if isOnline {
                             Circle()
-                                .fill(Color.green.opacity(0.3))
-                                .frame(width: 44, height: 44)
-                                .blur(radius: 4)
+                                .fill(Color.green.opacity(0.5))
+                                .frame(width: 46, height: 46)
                         }
                         
                         // Profile photo or initial
@@ -62,10 +62,6 @@ struct ChatHeaderView: View {
                             userId: userId,
                             userName: otherUserName,
                             size: 36
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(isOnline ? Color.green : Color.clear, lineWidth: 2)
                         )
                     }
                     
@@ -99,6 +95,13 @@ struct ChatHeaderView: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
+            .sheet(isPresented: $showNicknameEditor) {
+                EditNicknameView(
+                    userId: userId,
+                    currentName: otherUserName,
+                    isPresented: $showNicknameEditor
+                )
+            }
         }
     }
 }
