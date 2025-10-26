@@ -1882,12 +1882,17 @@ struct MessageBubble: View {
                     ZStack(alignment: .topTrailing) {
                         // Voice message or text message
                         if message.messageType == "voice" {
+                            print("🎤 RENDERING VoiceMessageBubble for message: \(message.id)")
+                            print("🎤 Message type: \(message.messageType ?? "nil")")
+                            print("🎤 Audio URL: \(message.audioUrl ?? "nil")")
                             VoiceMessageBubble(
                                 message: message,
                                 isFromCurrentUser: isFromCurrentUser,
                                 messageBubbleColor: messageBubbleColor
                             )
                         } else {
+                            print("📝 RENDERING Text message for message: \(message.id)")
+                            print("📝 Message type: \(message.messageType ?? "nil")")
                             Text(message.content)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
@@ -2396,6 +2401,11 @@ struct VoiceMessageBubble: View {
                     .foregroundColor(isFromCurrentUser ? .white : .blue)
             }
             .disabled(isLoading)
+            .onAppear {
+                print("🎤 VoiceMessageBubble BODY rendered for message: \(message.id)")
+                print("🎤 Audio URL: \(message.audioUrl ?? "nil")")
+                print("🎤 Duration: \(message.audioDuration ?? 0)s")
+            }
             
             // Waveform and duration
             VStack(alignment: .leading, spacing: 4) {
