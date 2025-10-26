@@ -18,7 +18,7 @@ struct ChatView: View {
     @StateObject private var aiService = AITranslationService.shared
     @StateObject private var preferences = UserPreferences.shared
     @StateObject private var voiceRecorder = VoiceMessageRecorder()
-    @StateObject private var voicePlayer = VoiceMessagePlayer()
+    @StateObject private var voiceToTextService = VoiceToTextService()
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @Query private var pendingAll: [PendingMessageData]
@@ -446,6 +446,49 @@ struct ChatView: View {
                                 .font(.system(size: 32))
                                 .foregroundColor(.red)
                         }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .background(Color(.systemGray6))
+                .onAppear {
+                    typingDotsAnimation = true
+                }
+            } else if voiceToTextService.isTranscribing {
+                // Voice-to-text transcription indicator
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        // Transcription indicator
+                        HStack(spacing: 8) {
+                            Image(systemName: "waveform")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 16))
+                                .opacity(typingDotsAnimation ? 0.3 : 1.0)
+                                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: typingDotsAnimation)
+                            
+                            Text("Converting voice to text...")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Spacer()
+                        
+                        // Cancel button
+                        Button(action: {
+                            voiceToTextService.cancelTranscription()
+                            cleanupVoiceRecording()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    
+                    if let errorMessage = voiceToTextService.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
                     }
                 }
                 .padding(.horizontal)
@@ -1599,7 +1642,7 @@ struct ChatView: View {
     }
     
     private func sendVoiceMessage(audioURL: URL, duration: TimeInterval) {
-        print("📤 Sending voice message:")
+        print("📤 Converting voice to text:")
         print("   Duration: \(String(format: "%.1f", duration))s")
         print("   File: \(audioURL.lastPathComponent)")
         
@@ -1618,9 +1661,9 @@ struct ChatView: View {
             print("   ❌ Audio file validation failed: \(error)")
             print("   📝 Sending as placeholder text due to invalid audio")
             
-            // Send placeholder instead of trying to upload invalid audio
+            // Send placeholder instead of trying to transcribe invalid audio
             let messageId = UUID().uuidString
-            sendVoiceMessagePlaceholder(duration: duration, messageId: messageId)
+            sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
             cleanupVoiceRecording()
             return
         }
@@ -1632,32 +1675,107 @@ struct ChatView: View {
         // Generate unique message ID
         let messageId = UUID().uuidString
         
-        // Phase B: Upload to S3 (async)
-        Task {
-            do {
-                // Try to upload to S3
-                let s3URL = try await S3VoiceStorage.shared.uploadVoiceMessage(
-                    fileURL: audioURL,
-                    userId: currentUserId,
-                    messageId: messageId
-                )
-                
-                print("✅ Voice message uploaded to S3: \(s3URL)")
-                
-                // Create voice message with S3 URL
-                await MainActor.run {
-                    sendVoiceMessageWithURL(s3URL: s3URL, duration: duration, messageId: messageId)
+        // Convert voice to text
+        voiceToTextService.transcribeAudioFile(url: audioURL) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let transcribedText):
+                    print("✅ Voice transcribed successfully: \(transcribedText)")
+                    self?.sendTranscribedText(transcribedText: transcribedText, messageId: messageId)
+                case .failure(let error):
+                    print("❌ Voice transcription failed: \(error)")
+                    // Fallback to placeholder text
+                    self?.sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
                 }
-                
-            } catch {
-                print("⚠️ S3 upload failed: \(error)")
-                print("📝 Error details: \(error.localizedDescription)")
-                
-                // Fallback: Send placeholder text message
-                await MainActor.run {
-                    sendVoiceMessagePlaceholder(duration: duration, messageId: messageId)
-                }
+                self?.cleanupVoiceRecording()
             }
+        }
+    }
+    
+    private func sendTranscribedText(transcribedText: String, messageId: String) {
+        // Create text message with transcribed content
+        let message = MessageData(
+            id: messageId,
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            senderName: currentUserName,
+            content: transcribedText,
+            timestamp: Date(),
+            status: "sending",
+            messageType: "voice-to-text", // Mark as voice-to-text for identification
+            audioUrl: nil,
+            audioDuration: nil
+        )
+        
+        do {
+            modelContext.insert(message)
+            try modelContext.save()
+            
+            // Send as regular text message via WebSocket
+            webSocketService.sendMessage(
+                messageId: messageId,
+                conversationId: conversation.id,
+                senderId: currentUserId,
+                senderName: currentUserName,
+                recipientId: recipientId,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
+                isGroupChat: conversation.isGroupChat,
+                content: transcribedText,
+                timestamp: Date(),
+                messageType: "voice-to-text"
+            )
+            
+            conversation.lastMessage = transcribedText
+            conversation.lastMessageTime = Date()
+            try modelContext.save()
+            
+            print("✅ Voice-to-text message sent: \(transcribedText)")
+            
+        } catch {
+            print("❌ Error sending voice-to-text message: \(error)")
+        }
+    }
+    
+    private func sendVoiceToTextPlaceholder(duration: TimeInterval, messageId: String) {
+        // Fallback: Send text placeholder when transcription fails
+        let placeholderText = "🎤 Voice message (\(formatRecordingDuration(duration))) - Transcription failed"
+        
+        let message = MessageData(
+            id: messageId,
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            senderName: currentUserName,
+            content: placeholderText,
+            timestamp: Date(),
+            status: "sending",
+            messageType: "voice-to-text"
+        )
+        
+        do {
+            modelContext.insert(message)
+            try modelContext.save()
+            
+            webSocketService.sendMessage(
+                messageId: messageId,
+                conversationId: conversation.id,
+                senderId: currentUserId,
+                senderName: currentUserName,
+                recipientId: recipientId,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
+                isGroupChat: conversation.isGroupChat,
+                content: placeholderText,
+                timestamp: Date(),
+                messageType: "voice-to-text"
+            )
+            
+            conversation.lastMessage = placeholderText
+            conversation.lastMessageTime = Date()
+            try modelContext.save()
+            
+            print("✅ Voice-to-text placeholder sent")
+            
+        } catch {
+            print("❌ Error sending voice-to-text placeholder: \(error)")
         }
     }
     
@@ -1890,6 +2008,25 @@ struct MessageBubble: View {
                                 print("🎤 RENDERING VoiceMessageBubble for message: \(message.id)")
                                 print("🎤 Message type: \(message.messageType ?? "nil")")
                                 print("🎤 Audio URL: \(message.audioUrl ?? "nil")")
+                            }
+                        } else if message.messageType == "voice-to-text" {
+                            // Voice-to-text message - show with special indicator
+                            HStack(spacing: 8) {
+                                Image(systemName: "waveform")
+                                    .foregroundColor(isFromCurrentUser ? .white.opacity(0.8) : .blue)
+                                    .font(.system(size: 14))
+                                
+                                Text(message.content)
+                                    .font(.body)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
+                            .foregroundColor(isFromCurrentUser ? .white : .primary)
+                            .cornerRadius(20)
+                            .onAppear {
+                                print("🎤 RENDERING Voice-to-text message for message: \(message.id)")
+                                print("🎤 Content: \(message.content)")
                             }
                         } else {
                             Text(message.content)
