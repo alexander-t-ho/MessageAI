@@ -662,6 +662,12 @@ class WebSocketService: ObservableObject {
                 if let type = json["type"] as? String, type == "message",
                    let messageData = json["data"] as? [String: Any] {
                     
+                    // Debug raw message data
+                    print("🔍 Raw message data received:")
+                    print("   messageType: \(messageData["messageType"] ?? "nil")")
+                    print("   audioUrl: \(messageData["audioUrl"] ?? "nil")")
+                    print("   audioDuration: \(messageData["audioDuration"] ?? "nil")")
+                    
                     // Parse message payload
                     let payload = try JSONDecoder().decode(MessagePayload.self, from: JSONSerialization.data(withJSONObject: messageData))
                     
@@ -681,6 +687,8 @@ class WebSocketService: ObservableObject {
                         print("   Audio URL: \(payload.audioUrl ?? "nil")")
                         print("   Duration: \(payload.audioDuration ?? 0)s")
                         print("   Transcript: \(payload.transcript ?? "none")")
+                    } else {
+                        print("📝 Text message received - messageType: \(payload.messageType ?? "nil")")
                     }
                     
                     // Add to received messages
