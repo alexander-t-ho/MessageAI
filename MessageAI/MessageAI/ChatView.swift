@@ -1882,23 +1882,27 @@ struct MessageBubble: View {
                     ZStack(alignment: .topTrailing) {
                         // Voice message or text message
                         if message.messageType == "voice" {
-                            print("🎤 RENDERING VoiceMessageBubble for message: \(message.id)")
-                            print("🎤 Message type: \(message.messageType ?? "nil")")
-                            print("🎤 Audio URL: \(message.audioUrl ?? "nil")")
                             VoiceMessageBubble(
                                 message: message,
                                 isFromCurrentUser: isFromCurrentUser,
                                 messageBubbleColor: messageBubbleColor
                             )
+                            .onAppear {
+                                print("🎤 RENDERING VoiceMessageBubble for message: \(message.id)")
+                                print("🎤 Message type: \(message.messageType ?? "nil")")
+                                print("🎤 Audio URL: \(message.audioUrl ?? "nil")")
+                            }
                         } else {
-                            print("📝 RENDERING Text message for message: \(message.id)")
-                            print("📝 Message type: \(message.messageType ?? "nil")")
                             Text(message.content)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
                                 .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
                                 .foregroundColor(isFromCurrentUser ? .white : .primary)
                                 .cornerRadius(20)
+                                .onAppear {
+                                    print("📝 RENDERING Text message for message: \(message.id)")
+                                    print("📝 Message type: \(message.messageType ?? "nil")")
+                                }
                         }
                         
                         // Emphasis indicator
