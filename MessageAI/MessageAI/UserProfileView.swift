@@ -142,6 +142,7 @@ struct UserProfileView: View {
                 } footer: {
                     Text("Upload a custom photo for this user. Only you will see it.")
                 }
+                
             }
             .navigationTitle("User Profile")
             .navigationBarTitleDisplayMode(.inline)

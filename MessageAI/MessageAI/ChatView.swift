@@ -1203,10 +1203,16 @@ struct ChatView: View {
                             for (userId, timestampStr) in readTimestamps {
                                 if let date = ISO8601DateFormatter().date(from: timestampStr) {
                                     timestamps[userId] = date
+                                    print("   ⏰ Timestamp for \(userId): \(date)")
+                                } else {
+                                    print("   ⚠️ Failed to parse timestamp: \(timestampStr)")
                                 }
                             }
                             msg.readTimestamps = timestamps
                             print("   👥 Read timestamps stored for \(timestamps.count) users")
+                            print("   📝 Message.readTimestamps now has: \(msg.readTimestamps)")
+                        } else {
+                            print("   ⚠️ No readTimestamps in payload")
                         }
                     }
                 } else {
@@ -1615,6 +1621,15 @@ struct MessageBubble: View {
                     if !isFromCurrentUser && !message.isDeleted {
                         Button(action: onTranslateAndExplain) {
                             Label("Translate & Explain", systemImage: "sparkles")
+                        }
+                        
+                        Divider()
+                    }
+                    
+                    // View Read Receipts - only for group chats and sender's own messages
+                    if conversation.isGroupChat && isFromCurrentUser && !message.isDeleted {
+                        NavigationLink(destination: ReadReceiptDetailsView(message: message, conversation: conversation)) {
+                            Label("View Read Receipts", systemImage: "eye.fill")
                         }
                         
                         Divider()

@@ -559,6 +559,11 @@ class WebSocketService: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
             print("🚀 Sending initial presence after connection established")
             sendPresence(isOnline: true)
+            
+            // Also send a ping to ensure backend knows we're connected
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+            print("📡 Sending ping to backend")
+            sendPresence(isOnline: true) // Send again to ensure it's received
         }
         
         // Announce a lightweight ping so backend can record/refresh latest connection
@@ -673,21 +678,22 @@ class WebSocketService: ObservableObject {
                 } else if let type = json["type"] as? String, type == "catchUpComplete" {
                     // Signal catch-up completion
                     catchUpCounter += 1
-        } else if let type = json["type"] as? String, type == "presence",
-                  let presence = json["data"] as? [String: Any],
-                  let userId = presence["userId"] as? String,
-                  let isOnline = presence["isOnline"] as? Bool {
-            Task { @MainActor in
-                // Don't update our own presence
-                if userId != self.userId {
-                    userPresence[userId] = isOnline
-                    print("👥 Presence update received: \(userId) is now \(isOnline ? "ONLINE ✅" : "OFFLINE ⭕")")
-                    print("👥 All online users: \(userPresence.filter { $0.value }.keys.joined(separator: ", "))")
-                } else {
-                    print("👥 Ignoring own presence update for \(userId)")
-                }
-            }
-        } else if let type = json["type"] as? String, type == "typing",
+                } else if let type = json["type"] as? String, type == "presence",
+                          let presence = json["data"] as? [String: Any],
+                          let userId = presence["userId"] as? String,
+                          let isOnline = presence["isOnline"] as? Bool {
+                    Task { @MainActor in
+                        // Don't update our own presence
+                        if userId != self.userId {
+                            userPresence[userId] = isOnline
+                            print("👥 Presence update received: \(userId) is now \(isOnline ? "ONLINE ✅" : "OFFLINE ⭕")")
+                            print("👥 All online users: \(userPresence.filter { $0.value }.keys.joined(separator: ", "))")
+                            print("👥 Total users tracked: \(userPresence.count)")
+                        } else {
+                            print("👥 Ignoring own presence update for \(userId)")
+                        }
+                    }
+                } else if let type = json["type"] as? String, type == "typing",
                   let typingData = json["data"] as? [String: Any],
                   let conversationId = typingData["conversationId"] as? String,
                   let senderName = typingData["senderName"] as? String,

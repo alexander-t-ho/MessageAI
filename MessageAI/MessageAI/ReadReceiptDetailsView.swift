@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ReadReceiptDetailsView: View {
     let message: MessageData
     let conversation: ConversationData
+    @Environment(\.modelContext) private var modelContext
     
     private var readCount: Int {
         message.readByUserNames.count
@@ -34,28 +36,57 @@ struct ReadReceiptDetailsView: View {
             }
             .padding()
             .background(Color(.systemGroupedBackground))
+            .onAppear {
+                print("📊 ReadReceiptDetailsView - readByUserNames: \(message.readByUserNames)")
+                print("📊 ReadTimestamps dictionary: \(message.readTimestamps)")
+                print("📊 Total timestamps: \(message.readTimestamps.count)")
+            }
             
             // Scrollable list of readers
             ScrollView {
                 VStack(spacing: 0) {
                     // Who has read
-                    ForEach(Array(zip(message.readByUserNames, message.readByUserNames.indices)), id: \.1) { name, index in
+                    ForEach(Array(zip(message.readByUserNames, message.readByUserNames.indices)), id: \.1) { realName, index in
                         HStack {
                             // Checkmark
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                                 .font(.title3)
                             
-                            // Name
-                            Text(name)
-                                .font(.body)
+                            // Name (show nickname if set, otherwise real name)
+                            VStack(alignment: .leading, spacing: 2) {
+                                if let userId = getUserId(for: realName) {
+                                    let displayName = UserCustomizationManager.shared.getNickname(
+                                        for: userId,
+                                        realName: realName,
+                                        modelContext: modelContext
+                                    )
+                                    Text(displayName)
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                    
+                                    // Show real name in smaller text if nickname is set
+                                    if displayName != realName {
+                                        Text(realName)
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
+                                } else {
+                                    Text(realName)
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                }
+                            }
                             
                             Spacer()
                             
-                            // Checkmark indicator
-                            Image(systemName: "checkmark")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                            // Timestamp when user read the message (NO checkmark, just time)
+                            if let userId = getUserId(for: realName),
+                               let timestamp = message.readTimestamps[userId] {
+                                Text(formatTime(timestamp))
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 12)
@@ -71,17 +102,37 @@ struct ReadReceiptDetailsView: View {
                         Divider()
                             .padding(.vertical, 8)
                         
-                        ForEach(Array(unreadMembers.enumerated()), id: \.offset) { index, name in
+                        ForEach(Array(unreadMembers.enumerated()), id: \.offset) { index, realName in
                             HStack {
                                 // Empty circle
                                 Image(systemName: "circle")
                                     .foregroundColor(.gray)
                                     .font(.title3)
                                 
-                                // Name
-                                Text(name)
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
+                                // Name (show nickname if set)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if let userId = getUserId(for: realName) {
+                                        let displayName = UserCustomizationManager.shared.getNickname(
+                                            for: userId,
+                                            realName: realName,
+                                            modelContext: modelContext
+                                        )
+                                        Text(displayName)
+                                            .font(.body)
+                                            .foregroundColor(.secondary)
+                                        
+                                        // Show real name if nickname is set
+                                        if displayName != realName {
+                                            Text(realName)
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                        }
+                                    } else {
+                                        Text(realName)
+                                            .font(.body)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
                                 
                                 Spacer()
                                 

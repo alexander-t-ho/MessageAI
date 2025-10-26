@@ -786,11 +786,20 @@ struct ConversationRow: View {
             let currentUserId = authViewModel.currentUser?.id ?? ""
             let currentUserName = authViewModel.currentUser?.name ?? ""
             
-            // Find the other participant's name
+            // Find the other participant's ID and name
             if let otherIndex = conversation.participantIds.firstIndex(where: { $0 != currentUserId }) {
-                // Use the same index to get the name from participantNames array
+                let otherUserId = conversation.participantIds[otherIndex]
+                
+                // Use the same index to get the real name from participantNames array
                 if otherIndex < conversation.participantNames.count {
-                    return conversation.participantNames[otherIndex]
+                    let realName = conversation.participantNames[otherIndex]
+                    
+                    // Use custom nickname if set, otherwise real name
+                    return UserCustomizationManager.shared.getNickname(
+                        for: otherUserId,
+                        realName: realName,
+                        modelContext: modelContext
+                    )
                 }
             }
             
