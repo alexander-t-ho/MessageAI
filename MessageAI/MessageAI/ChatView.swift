@@ -1682,7 +1682,7 @@ struct ChatView: View {
             
             // TODO: Update WebSocket to send voice message with URL
             // For now, send as regular message
-            let recipientId = conversation.isGroupChat ? "" : (conversation.participantIds.first { $0 != currentUserId } ?? "")
+            // Use the same recipientId logic as regular messages
             
             webSocketService.sendMessage(
                 messageId: messageId,
@@ -1690,7 +1690,7 @@ struct ChatView: View {
                 senderId: currentUserId,
                 senderName: currentUserName,
                 recipientId: recipientId,
-                recipientIds: conversation.isGroupChat ? conversation.participantIds.filter { $0 != currentUserId } : nil,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
                 isGroupChat: conversation.isGroupChat,
                 content: "🎤 Voice message (\(formatRecordingDuration(duration)))",
                 timestamp: Date(),
@@ -1729,15 +1729,14 @@ struct ChatView: View {
             modelContext.insert(message)
             try modelContext.save()
             
-            let recipientId = conversation.isGroupChat ? "" : (conversation.participantIds.first { $0 != currentUserId } ?? "")
-            
+            // Use the same recipientId logic as regular messages
             webSocketService.sendMessage(
                 messageId: messageId,
                 conversationId: conversation.id,
                 senderId: currentUserId,
                 senderName: currentUserName,
                 recipientId: recipientId,
-                recipientIds: conversation.isGroupChat ? conversation.participantIds.filter { $0 != currentUserId } : nil,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds : [recipientId],
                 isGroupChat: conversation.isGroupChat,
                 content: placeholderText,
                 timestamp: Date()
