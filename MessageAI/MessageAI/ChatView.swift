@@ -17,6 +17,8 @@ struct ChatView: View {
     @EnvironmentObject var webSocketService: WebSocketService
     @StateObject private var aiService = AITranslationService.shared
     @StateObject private var preferences = UserPreferences.shared
+    @StateObject private var voiceRecorder = VoiceMessageRecorder()
+    @StateObject private var voicePlayer = VoiceMessagePlayer()
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @Query private var pendingAll: [PendingMessageData]
@@ -39,7 +41,13 @@ struct ChatView: View {
     @State private var typingTimer: Timer? = nil // Timer for typing indicator timeout
     @State private var lastTypingTime: Date = Date() // Track last typing activity
     @State private var typingDotsAnimation: Bool = false // Animation trigger for typing dots
-    @State private var showGroupDetails = false // Show group details sheet
+    @State private var showGroupDetails = false
+    
+    // Voice message recording states
+    @State private var isRecordingVoice = false
+    @State private var recordedVoiceURL: URL?
+    @State private var recordedVoiceDuration: TimeInterval = 0
+    @State private var showVoicePreview = false
     
     private var databaseService: DatabaseService {
         DatabaseService(modelContext: modelContext)
@@ -103,6 +111,13 @@ struct ChatView: View {
     // Queued count for this conversation
     private var queuedCount: Int {
         pendingAll.filter { $0.conversationId == conversation.id }.count
+    }
+    
+    // Format recording duration
+    private func formatRecordingDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
     
     var body: some View {
@@ -392,64 +407,179 @@ struct ChatView: View {
                 .padding(.vertical, 4)
             }
             
-            // Input bar
-            HStack(spacing: 12) {
-                TextField("Message", text: $messageText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...6)
-                    .focused($isInputFocused)
-                    .onChange(of: messageText) { oldValue, newValue in
-                        // Avoid recreating a draft immediately after send
-                        guard !suppressDraftSaves else { return }
-                        saveDraft(newValue)
+            // Voice recording indicator (shown when recording)
+            if voiceRecorder.isRecording {
+                VStack(spacing: 8) {
+                    // Waveform animation
+                    VoiceWaveformView(
+                        audioLevel: voiceRecorder.audioLevel,
+                        isRecording: true
+                    )
+                    .frame(height: 50)
+                    
+                    HStack(spacing: 12) {
+                        // Recording indicator
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 12, height: 12)
+                                .opacity(typingDotsAnimation ? 0.3 : 1.0)
+                                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: typingDotsAnimation)
+                            
+                            Text("Recording...")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                        }
                         
-                        // Send typing indicator
-                        handleTypingIndicator(oldValue: oldValue, newValue: newValue)
-                    }
-                
-                // Offline/Queue badge (based on WS connection)
-                if !isOnlineEffective || queuedCount > 0 {
-                    HStack(spacing: 6) {
-                        Image(systemName: isOnlineEffective ? "arrow.triangle.2.circlepath" : "icloud.slash")
-                            .font(.system(size: 12, weight: .semibold))
-                        if queuedCount > 0 {
-                            Text("\(queuedCount)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                        } else {
-                            Text("Offline")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
+                        Spacer()
+                        
+                        // Duration
+                        Text(formatRecordingDuration(voiceRecorder.recordingDuration))
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.primary)
+                        
+                        // Stop button
+                        Button(action: {
+                            stopVoiceRecording()
+                        }) {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(.red)
                         }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color(.systemGray5)))
-                    .foregroundColor(.gray)
-                    .accessibilityLabel("Queued messages: \(queuedCount). \(isOnlineEffective ? "Online" : "Offline")")
                 }
-                
-                Button(action: {
-                    if messageToEdit != nil {
-                        saveEdit()
-                    } else {
-                        sendMessage()
-                    }
-                }) {
-                    if isLoading {
-                        ProgressView()
-                            .frame(width: 32, height: 32)
-                    } else {
-                        Image(systemName: messageToEdit != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .background(Color(.systemGray6))
+                .onAppear {
+                    typingDotsAnimation = true
+                }
+            } else if showVoicePreview, let voiceURL = recordedVoiceURL {
+                // Voice preview mode (after recording stops)
+                VStack(spacing: 8) {
+                    // Waveform (static when not recording)
+                    VoiceWaveformView(
+                        audioLevel: Float(voicePlayer.playbackProgress),
+                        isRecording: false
+                    )
+                    .frame(height: 50)
+                    
+                    HStack(spacing: 12) {
+                        // Play/Pause button
+                        Button(action: {
+                            if voicePlayer.isPlaying {
+                                voicePlayer.pause()
+                            } else {
+                                if voicePlayer.duration == 0 {
+                                    voicePlayer.loadAudio(url: voiceURL)
+                                }
+                                voicePlayer.play()
+                            }
+                        }) {
+                            Image(systemName: voicePlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(.blue)
+                        }
+                        
+                        // Duration / Progress
+                        Text("\(formatRecordingDuration(voicePlayer.currentTime)) / \(formatRecordingDuration(recordedVoiceDuration))")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        // Delete button
+                        Button(action: {
+                            cancelVoicePreview()
+                        }) {
+                            Image(systemName: "trash.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.red)
+                        }
+                        
+                        // Send button
+                        Button(action: {
+                            sendVoiceMessageFromPreview()
+                        }) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(.blue)
+                        }
                     }
                 }
-                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .background(Color(.systemGray6))
+            } else {
+                // Input bar (normal state)
+                HStack(spacing: 12) {
+                    TextField("Message", text: $messageText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(1...6)
+                        .focused($isInputFocused)
+                        .onChange(of: messageText) { oldValue, newValue in
+                            // Avoid recreating a draft immediately after send
+                            guard !suppressDraftSaves else { return }
+                            saveDraft(newValue)
+                            
+                            // Send typing indicator
+                            handleTypingIndicator(oldValue: oldValue, newValue: newValue)
+                        }
+                    
+                    // Offline/Queue badge (based on WS connection)
+                    if !isOnlineEffective || queuedCount > 0 {
+                        HStack(spacing: 6) {
+                            Image(systemName: isOnlineEffective ? "arrow.triangle.2.circlepath" : "icloud.slash")
+                                .font(.system(size: 12, weight: .semibold))
+                            if queuedCount > 0 {
+                                Text("\(queuedCount)")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                            } else {
+                                Text("Offline")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color(.systemGray5)))
+                        .foregroundColor(.gray)
+                        .accessibilityLabel("Queued messages: \(queuedCount). \(isOnlineEffective ? "Online" : "Offline")")
+                    }
+                    
+                    // Send button (tap to send text, long press to record voice)
+                    Button(action: {
+                        if messageToEdit != nil {
+                            saveEdit()
+                        } else {
+                            sendMessage()
+                        }
+                    }) {
+                        if isLoading {
+                            ProgressView()
+                                .frame(width: 32, height: 32)
+                        } else {
+                            Image(systemName: messageToEdit != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
+                        }
+                    }
+                    .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in
+                                // Long press detected - start voice recording
+                                if messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    startVoiceRecording()
+                                }
+                            }
+                    )
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground))
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(Color(.systemBackground))
         }
         .onAppear {
             // Initialize AI Translation Service with auth token
@@ -1010,6 +1140,14 @@ struct ChatView: View {
     private func handleReceivedMessage(_ payload: MessagePayload) {
         print("📥 Handling received WebSocket message: \(payload.messageId)")
         print("   From: \(payload.senderId), Current user: \(currentUserId)")
+        print("   Content: \(payload.content)")
+        print("   Message Type: \(payload.messageType ?? "text")")
+        if let audioUrl = payload.audioUrl {
+            print("   Audio URL: \(audioUrl)")
+        }
+        if let duration = payload.audioDuration {
+            print("   Duration: \(duration)s")
+        }
         
         // Only handle messages for this conversation
         guard payload.conversationId == conversation.id else {
@@ -1041,7 +1179,13 @@ struct ChatView: View {
             // isSentByCurrentUser removed - computed dynamically by MessageBubble
             replyToMessageId: payload.replyToMessageId,
             replyToContent: payload.replyToContent,
-            replyToSenderName: payload.replyToSenderName
+            replyToSenderName: payload.replyToSenderName,
+            // Voice message fields
+            messageType: payload.messageType,
+            audioUrl: payload.audioUrl,
+            audioDuration: payload.audioDuration,
+            transcript: payload.transcript,
+            isTranscribing: payload.isTranscribing ?? false
         )
         
         // Save to database
@@ -1365,6 +1509,245 @@ struct ChatView: View {
             print("Error forwarding message: \(error)")
         }
     }
+    
+    // MARK: - Voice Message Functions
+    
+    private func startVoiceRecording() {
+        guard !voiceRecorder.isRecording else { return }
+        
+        // Check permission first
+        guard voiceRecorder.hasPermission else {
+            voiceRecorder.requestMicrophonePermission()
+            return
+        }
+        
+        print("🎤 Starting voice recording")
+        voiceRecorder.startRecording()
+        isInputFocused = false // Dismiss keyboard
+    }
+    
+    private func stopVoiceRecording() {
+        guard voiceRecorder.isRecording else { return }
+        
+        let duration = voiceRecorder.recordingDuration
+        
+        if let audioURL = voiceRecorder.stopRecording() {
+            // Check minimum duration (1 second)
+            if duration >= 1.0 {
+                print("✅ Voice message recorded: \(String(format: "%.1f", duration))s")
+                recordedVoiceURL = audioURL
+                recordedVoiceDuration = duration
+                showVoicePreview = true
+                
+                print("📁 Voice file saved at: \(audioURL.path)")
+                print("🎧 Entering preview mode")
+            } else {
+                print("⚠️ Recording too short (< 1s), cancelling")
+                voiceRecorder.cancelRecording()
+            }
+        }
+    }
+    
+    private func cancelVoicePreview() {
+        print("🗑️ Cancelling voice preview")
+        
+        // Stop playback if playing
+        voicePlayer.stop()
+        voicePlayer.cleanup()
+        
+        // Delete the recording file
+        if let url = recordedVoiceURL {
+            try? FileManager.default.removeItem(at: url)
+            print("🗑️ Deleted voice recording")
+        }
+        
+        // Reset state
+        recordedVoiceURL = nil
+        recordedVoiceDuration = 0
+        showVoicePreview = false
+    }
+    
+    private func sendVoiceMessageFromPreview() {
+        guard let audioURL = recordedVoiceURL else { return }
+        
+        print("📤 Sending voice message from preview")
+        
+        // Stop playback if playing
+        voicePlayer.stop()
+        voicePlayer.cleanup()
+        
+        // Send the voice message
+        sendVoiceMessage(audioURL: audioURL, duration: recordedVoiceDuration)
+        
+        // Reset preview state
+        showVoicePreview = false
+    }
+    
+    private func sendVoiceMessage(audioURL: URL, duration: TimeInterval) {
+        print("📤 Sending voice message:")
+        print("   Duration: \(String(format: "%.1f", duration))s")
+        print("   File: \(audioURL.lastPathComponent)")
+        
+        // Check if audio file exists and has content
+        do {
+            let fileAttributes = try FileManager.default.attributesOfItem(atPath: audioURL.path)
+            let fileSize = fileAttributes[.size] as? Int64 ?? 0
+            
+            if fileSize > 0 {
+                print("   ✅ Audio file exists and has content: \(fileSize) bytes")
+            } else {
+                print("   ❌ Audio file is empty")
+                throw NSError(domain: "AudioError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Audio file is empty"])
+            }
+        } catch {
+            print("   ❌ Audio file validation failed: \(error)")
+            print("   📝 Sending as placeholder text due to invalid audio")
+            
+            // Send placeholder instead of trying to upload invalid audio
+            let messageId = UUID().uuidString
+            sendVoiceMessagePlaceholder(duration: duration, messageId: messageId)
+            cleanupVoiceRecording()
+            return
+        }
+        
+        if let fileSize = voiceRecorder.getFileSize(url: audioURL) {
+            print("   Size: \(fileSize) bytes (\(Double(fileSize) / 1024.0) KB)")
+        }
+        
+        // Generate unique message ID
+        let messageId = UUID().uuidString
+        
+        // Phase B: Upload to S3 (async)
+        Task {
+            do {
+                // Try to upload to S3
+                let s3URL = try await S3VoiceStorage.shared.uploadVoiceMessage(
+                    fileURL: audioURL,
+                    userId: currentUserId,
+                    messageId: messageId
+                )
+                
+                print("✅ Voice message uploaded to S3: \(s3URL)")
+                
+                // Create voice message with S3 URL
+                await MainActor.run {
+                    sendVoiceMessageWithURL(s3URL: s3URL, duration: duration, messageId: messageId)
+                }
+                
+            } catch {
+                print("⚠️ S3 upload failed: \(error)")
+                print("📝 Error details: \(error.localizedDescription)")
+                
+                // Fallback: Send placeholder text message
+                await MainActor.run {
+                    sendVoiceMessagePlaceholder(duration: duration, messageId: messageId)
+                }
+            }
+        }
+    }
+    
+    private func sendVoiceMessageWithURL(s3URL: String, duration: TimeInterval, messageId: String) {
+        // Create voice message with actual S3 URL
+        let message = MessageData(
+            id: messageId,
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            senderName: currentUserName,
+            content: "🎤 Voice message", // Placeholder text for notifications
+            timestamp: Date(),
+            status: "sending",
+            messageType: "voice",
+            audioUrl: s3URL,
+            audioDuration: duration
+        )
+        
+        do {
+            modelContext.insert(message)
+            try modelContext.save()
+            
+            // TODO: Update WebSocket to send voice message with URL
+            // For now, send as regular message
+            let recipientId = conversation.isGroupChat ? "" : (conversation.participantIds.first { $0 != currentUserId } ?? "")
+            
+            webSocketService.sendMessage(
+                messageId: messageId,
+                conversationId: conversation.id,
+                senderId: currentUserId,
+                senderName: currentUserName,
+                recipientId: recipientId,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds.filter { $0 != currentUserId } : nil,
+                isGroupChat: conversation.isGroupChat,
+                content: "🎤 Voice message (\(formatRecordingDuration(duration)))",
+                timestamp: Date(),
+                messageType: "voice",
+                audioUrl: s3URL,
+                audioDuration: duration
+            )
+            
+            conversation.lastMessage = "🎤 Voice message"
+            conversation.lastMessageTime = Date()
+            try modelContext.save()
+            
+            print("✅ Voice message with S3 URL sent")
+            cleanupVoiceRecording()
+            
+        } catch {
+            print("❌ Error sending voice message: \(error)")
+        }
+    }
+    
+    private func sendVoiceMessagePlaceholder(duration: TimeInterval, messageId: String) {
+        // Fallback: Send text placeholder (Phase A behavior)
+        let placeholderText = "🎤 Voice message (\(formatRecordingDuration(duration)))"
+        
+        let message = MessageData(
+            id: messageId,
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            senderName: currentUserName,
+            content: placeholderText,
+            timestamp: Date(),
+            status: "sending"
+        )
+        
+        do {
+            modelContext.insert(message)
+            try modelContext.save()
+            
+            let recipientId = conversation.isGroupChat ? "" : (conversation.participantIds.first { $0 != currentUserId } ?? "")
+            
+            webSocketService.sendMessage(
+                messageId: messageId,
+                conversationId: conversation.id,
+                senderId: currentUserId,
+                senderName: currentUserName,
+                recipientId: recipientId,
+                recipientIds: conversation.isGroupChat ? conversation.participantIds.filter { $0 != currentUserId } : nil,
+                isGroupChat: conversation.isGroupChat,
+                content: placeholderText,
+                timestamp: Date()
+            )
+            
+            conversation.lastMessage = placeholderText
+            conversation.lastMessageTime = Date()
+            try modelContext.save()
+            
+            print("✅ Voice message placeholder sent")
+            cleanupVoiceRecording()
+            
+        } catch {
+            print("❌ Error sending voice message: \(error)")
+        }
+    }
+    
+    private func cleanupVoiceRecording() {
+        // Reset all voice recording state
+        recordedVoiceURL = nil
+        recordedVoiceDuration = 0
+        showVoicePreview = false
+        voicePlayer.cleanup()
+        print("🧹 Voice recording state cleaned up")
+    }
 }
 
 // MARK: - Message Bubble
@@ -1482,12 +1865,21 @@ struct MessageBubble: View {
                     
                     // Message content with emphasis overlay
                     ZStack(alignment: .topTrailing) {
-                        Text(message.content)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
-                            .foregroundColor(isFromCurrentUser ? .white : .primary)
-                            .cornerRadius(20)
+                        // Voice message or text message
+                        if message.messageType == "voice" {
+                            VoiceMessageBubble(
+                                message: message,
+                                isFromCurrentUser: isFromCurrentUser,
+                                messageBubbleColor: messageBubbleColor
+                            )
+                        } else {
+                            Text(message.content)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
+                                .foregroundColor(isFromCurrentUser ? .white : .primary)
+                                .cornerRadius(20)
+                        }
                         
                         // Emphasis indicator
                         if message.isEmphasized {
@@ -1964,6 +2356,228 @@ struct ForwardMessageView: View {
         let name = displayName(for: conversation)
         let index = abs(name.hashValue % colors.count)
         return colors[index]
+    }
+}
+
+// MARK: - Voice Message Bubble Component
+struct VoiceMessageBubble: View {
+    let message: MessageData
+    let isFromCurrentUser: Bool
+    let messageBubbleColor: Color
+    
+    @StateObject private var voicePlayer = VoiceMessagePlayer()
+    @State private var isPlaying = false
+    @State private var currentTime: TimeInterval = 0
+    @State private var duration: TimeInterval = 0
+    @State private var isLoading = false
+    @State private var hasError = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Play/Pause button
+            Button(action: togglePlayback) {
+                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(isFromCurrentUser ? .white : .blue)
+            }
+            .disabled(isLoading)
+            
+            // Waveform and duration
+            VStack(alignment: .leading, spacing: 4) {
+                // Waveform visualization
+                if isLoading {
+                    HStack(spacing: 2) {
+                        ForEach(0..<8, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(isFromCurrentUser ? Color.white.opacity(0.6) : Color.gray.opacity(0.6))
+                                .frame(width: 3, height: 8)
+                                .animation(.easeInOut(duration: 0.5).repeatForever(), value: isLoading)
+                        }
+                    }
+                } else if hasError {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("🎤 Voice message")
+                            .font(.subheadline)
+                            .foregroundColor(isFromCurrentUser ? .white : .primary)
+                        
+                        Button("Retry") {
+                            hasError = false
+                            playVoiceMessage()
+                        }
+                        .font(.caption)
+                        .foregroundColor(isFromCurrentUser ? .white.opacity(0.8) : .blue)
+                    }
+                } else {
+                    VoicePlaybackWaveformView(
+                        isPlaying: isPlaying,
+                        currentTime: currentTime,
+                        duration: duration
+                    )
+                }
+                
+                // Duration
+                Text(formatDuration(currentTime))
+                    .font(.caption)
+                    .foregroundColor(isFromCurrentUser ? .white.opacity(0.8) : .secondary)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
+        .cornerRadius(20)
+        .onAppear {
+            setupAudioPlayer()
+        }
+        .onDisappear {
+            voicePlayer.stop()
+        }
+    }
+    
+    private func setupAudioPlayer() {
+        duration = message.audioDuration ?? 0
+        
+        print("🎵 Setting up voice player for message: \(message.id)")
+        print("🎵 Audio URL: \(message.audioUrl ?? "nil")")
+        print("🎵 Duration: \(duration)s")
+        print("🎵 Message type: \(message.messageType ?? "nil")")
+        
+        // Set up player callbacks
+        voicePlayer.onPlaybackStateChanged = { playing in
+            print("🎵 Playback state changed: \(playing)")
+            isPlaying = playing
+        }
+        
+        voicePlayer.onTimeUpdate = { time in
+            currentTime = time
+        }
+        
+        voicePlayer.onError = { error in
+            print("❌ Voice playback error: \(error)")
+            hasError = true
+            isLoading = false
+        }
+    }
+    
+    private func togglePlayback() {
+        if isPlaying {
+            voicePlayer.pause()
+        } else {
+            playVoiceMessage()
+        }
+    }
+    
+    private func playVoiceMessage() {
+        guard let audioURLString = message.audioUrl,
+              let audioURL = URL(string: audioURLString) else {
+            print("❌ Voice message has no audio URL")
+            hasError = true
+            return
+        }
+        
+        print("🎵 Playing voice message from: \(audioURLString)")
+        print("🎵 Message ID: \(message.id)")
+        print("🎵 Duration: \(message.audioDuration ?? 0)s")
+        isLoading = true
+        hasError = false
+        
+        // Try to play from URL (handles both local and S3 URLs)
+        voicePlayer.play(url: audioURL) { success in
+            DispatchQueue.main.async {
+                isLoading = false
+                if success {
+                    print("✅ Voice message playback started successfully")
+                } else {
+                    print("❌ Voice message playback failed")
+                    hasError = true
+                }
+            }
+        }
+    }
+    
+    private func generateMockWaveform() -> [Float] {
+        // Generate a simple waveform pattern
+        let count = 20
+        return (0..<count).map { _ in Float.random(in: 0.1...1.0) }
+    }
+    
+    private func formatDuration(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Voice Playback Waveform Component
+struct VoicePlaybackWaveformView: View {
+    let isPlaying: Bool
+    let currentTime: TimeInterval
+    let duration: TimeInterval
+    
+    @State private var animationPhase: CGFloat = 0
+    
+    private let barCount = 20
+    private let barWidth: CGFloat = 3
+    private let barSpacing: CGFloat = 2
+    
+    var body: some View {
+        HStack(spacing: barSpacing) {
+            ForEach(0..<barCount, id: \.self) { index in
+                RoundedRectangle(cornerRadius: barWidth / 2)
+                    .fill(Color.blue.opacity(0.7))
+                    .frame(width: barWidth, height: barHeight(for: index))
+                    .animation(
+                        .easeInOut(duration: 0.3)
+                        .delay(Double(index) * 0.01),
+                        value: animationPhase
+                    )
+            }
+        }
+        .frame(height: 30)
+        .onAppear {
+            if isPlaying {
+                startAnimation()
+            }
+        }
+        .onChange(of: isPlaying) { _, newValue in
+            if newValue {
+                startAnimation()
+            } else {
+                stopAnimation()
+            }
+        }
+    }
+    
+    private func startAnimation() {
+        withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+            animationPhase = 1
+        }
+    }
+    
+    private func stopAnimation() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            animationPhase = 0
+        }
+    }
+    
+    private func barHeight(for index: Int) -> CGFloat {
+        let baseHeight: CGFloat = 4
+        let maxHeight: CGFloat = 30
+        
+        if !isPlaying {
+            return baseHeight
+        }
+        
+        // Create wave pattern based on index and animation phase
+        let normalizedIndex = CGFloat(index) / CGFloat(barCount)
+        let waveOffset = sin(normalizedIndex * .pi * 4 + animationPhase * .pi * 2)
+        
+        // Add some randomness for more natural look
+        let randomFactor = CGFloat.random(in: 0.7...1.0)
+        let height = baseHeight + (maxHeight - baseHeight) * abs(waveOffset) * randomFactor
+        
+        return max(baseHeight, height)
     }
 }
 

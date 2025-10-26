@@ -3,15 +3,15 @@
  * Stores device tokens for push notifications
  */
 
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
 const DEVICES_TABLE = process.env.DEVICES_TABLE || "DeviceTokens_AlexHo";
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   console.log("Register Device Event:", JSON.stringify(event, null, 2));
   
   let body;

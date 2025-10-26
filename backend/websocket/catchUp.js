@@ -2,9 +2,9 @@
  * WebSocket Catch-up Handler
  * Resolve userId from connectionId, then push recent messages to that connection.
  */
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -12,7 +12,7 @@ const docClient = DynamoDBDocumentClient.from(client);
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE || "Messages_AlexHo";
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || "Connections_AlexHo";
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   console.log("CatchUp Event:", JSON.stringify(event, null, 2));
   const connectionId = event.requestContext.connectionId;
   const domain = event.requestContext.domainName;
@@ -94,6 +94,12 @@ export const handler = async (event) => {
             replyToSenderName: m.replyToSenderName || null,
             isEdited: m.isEdited || false,
             editedAt: m.editedAt || null,
+            // Voice message fields
+            messageType: m.messageType || null,
+            audioUrl: m.audioUrl || null,
+            audioDuration: m.audioDuration || null,
+            transcript: m.transcript || null,
+            isTranscribing: m.isTranscribing || false,
           },
         })),
       }));

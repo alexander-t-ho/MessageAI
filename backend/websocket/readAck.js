@@ -2,9 +2,9 @@
  * WebSocket readAck Handler
  * Receives { conversationId, readerId, messageIds, readAt } and notifies senders with messageStatus=read.
  */
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -12,7 +12,7 @@ const docClient = DynamoDBDocumentClient.from(client);
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE || "Messages_AlexHo";
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || "Connections_AlexHo";
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   try {
     console.log("readAck Event:", JSON.stringify(event, null, 2));
     const domain = event.requestContext?.domainName;

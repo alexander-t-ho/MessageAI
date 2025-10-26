@@ -52,6 +52,13 @@ struct MessagePayload: Codable {
     let replyToSenderName: String?
     let isEdited: Bool?
     let editedAt: String?
+    
+    // Voice message fields
+    let messageType: String?
+    let audioUrl: String?
+    let audioDuration: Double?
+    let transcript: String?
+    let isTranscribing: Bool?
 }
 
 struct DeletePayload: Codable {
@@ -186,7 +193,13 @@ class WebSocketService: ObservableObject {
         timestamp: Date,
         replyToMessageId: String? = nil,
         replyToContent: String? = nil,
-        replyToSenderName: String? = nil
+        replyToSenderName: String? = nil,
+        // Voice message fields
+        messageType: String? = nil,
+        audioUrl: String? = nil,
+        audioDuration: Double? = nil,
+        transcript: String? = nil,
+        isTranscribing: Bool? = nil
     ) {
         guard connectionState == .connected else {
             print("❌ Cannot send message - not connected")
@@ -205,7 +218,13 @@ class WebSocketService: ObservableObject {
             "timestamp": ISO8601DateFormatter().string(from: timestamp),
             "replyToMessageId": replyToMessageId as Any,
             "replyToContent": replyToContent as Any,
-            "replyToSenderName": replyToSenderName as Any
+            "replyToSenderName": replyToSenderName as Any,
+            // Voice message fields
+            "messageType": messageType as Any,
+            "audioUrl": audioUrl as Any,
+            "audioDuration": audioDuration as Any,
+            "transcript": transcript as Any,
+            "isTranscribing": isTranscribing as Any
         ]
         
         // Add group chat specific fields

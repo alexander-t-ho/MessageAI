@@ -5,9 +5,9 @@
  * 2. Notifies all participants about the new group
  */
 
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const docClient = DynamoDBDocumentClient.from(client);
@@ -15,7 +15,7 @@ const docClient = DynamoDBDocumentClient.from(client);
 const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE || 'Conversations_AlexHo';
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'Connections_AlexHo';
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
     console.log('🎯🎯🎯 WebSocket GroupCreated Event RECEIVED 🎯🎯🎯');
     console.log('Event:', JSON.stringify(event, null, 2));
     

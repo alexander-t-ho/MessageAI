@@ -41,7 +41,7 @@ final class MessageData {
     var editedAt: Date? // When the message was last edited
     
     // Emphasis feature (like/reaction)
-    var isEmphasized: Bool // True if message has emphasis
+    var isEmphasized: Bool
     var emphasizedBy: [String] // Array of user IDs who emphasized this message
     
     // Voice message fields

@@ -51,8 +51,23 @@ exports.handler = async (event) => {
         replyToContent,
         replyToSenderName,
         isGroupChat,
-        nickname  // Group chat nickname
+        nickname,  // Group chat nickname
+        // Voice message fields
+        messageType,
+        audioUrl,
+        audioDuration,
+        transcript,
+        isTranscribing
     } = messageData;
+    
+    // Log voice message fields if present
+    if (messageType === 'voice') {
+        console.log('🎤 Voice message detected:');
+        console.log(`   Audio URL: ${audioUrl}`);
+        console.log(`   Duration: ${audioDuration}s`);
+        console.log(`   Transcript: ${transcript || 'none'}`);
+        console.log(`   Is Transcribing: ${isTranscribing}`);
+    }
     
     // Validate required fields
     if (!messageId || !conversationId || !senderId || !content) {
@@ -96,7 +111,13 @@ exports.handler = async (event) => {
                         isGroupChat: true,
                         replyToMessageId: replyToMessageId || null,
                         replyToContent: replyToContent || null,
-                        replyToSenderName: replyToSenderName || null
+                        replyToSenderName: replyToSenderName || null,
+                        // Voice message fields
+                        messageType: messageType || null,
+                        audioUrl: audioUrl || null,
+                        audioDuration: audioDuration || null,
+                        transcript: transcript || null,
+                        isTranscribing: isTranscribing || false
                     }
                 }));
             });
@@ -118,7 +139,13 @@ exports.handler = async (event) => {
                     isDeleted: false,
                     replyToMessageId: replyToMessageId || null,
                     replyToContent: replyToContent || null,
-                    replyToSenderName: replyToSenderName || null
+                    replyToSenderName: replyToSenderName || null,
+                    // Voice message fields
+                    messageType: messageType || null,
+                    audioUrl: audioUrl || null,
+                    audioDuration: audioDuration || null,
+                    transcript: transcript || null,
+                    isTranscribing: isTranscribing || false
                 }
             }));
             console.log(`✅ Direct message saved to DynamoDB: ${messageId}`);
@@ -166,7 +193,13 @@ exports.handler = async (event) => {
                                 status: 'delivered',
                                 replyToMessageId,
                                 replyToContent,
-                                replyToSenderName
+                                replyToSenderName,
+                                // Voice message fields
+                                messageType: messageType || null,
+                                audioUrl: audioUrl || null,
+                                audioDuration: audioDuration || null,
+                                transcript: transcript || null,
+                                isTranscribing: isTranscribing || false
                             }
                         }))
                     }));
