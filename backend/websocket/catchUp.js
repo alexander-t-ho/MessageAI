@@ -78,6 +78,14 @@ exports.handler = async (event) => {
       
       console.log(`  - Message ${actualMessageId} from ${m.senderName} in conversation ${m.conversationId}${m.isGroupChat ? ' (GROUP)' : ''}`);
       
+      // Log raw DynamoDB data for debugging
+      console.log(`🔍 Raw DynamoDB data for message ${actualMessageId}:`);
+      console.log(`   messageType: ${m.messageType}`);
+      console.log(`   audioUrl: ${m.audioUrl}`);
+      console.log(`   audioDuration: ${m.audioDuration}`);
+      console.log(`   transcript: ${m.transcript}`);
+      console.log(`   isTranscribing: ${m.isTranscribing}`);
+      
       // Log voice message details if present
       if (m.messageType === 'voice') {
         console.log(`🎤 Voice message being delivered via catchUp:`);
