@@ -1553,9 +1553,7 @@ struct ChatView: View {
     private func cancelVoicePreview() {
         print("🗑️ Cancelling voice preview")
         
-        // Stop playback if playing
-        voicePlayer.stop()
-        voicePlayer.cleanup()
+        // Stop playback if playing (no longer needed for voice-to-text)
         
         // Delete the recording file
         if let url = recordedVoiceURL {
@@ -1574,9 +1572,7 @@ struct ChatView: View {
         
         print("📤 Sending voice message from preview")
         
-        // Stop playback if playing
-        voicePlayer.stop()
-        voicePlayer.cleanup()
+        // Stop playback if playing (no longer needed for voice-to-text)
         
         // Send the voice message
         sendVoiceMessage(audioURL: audioURL, duration: recordedVoiceDuration)
@@ -1821,7 +1817,7 @@ struct ChatView: View {
         recordedVoiceURL = nil
         recordedVoiceDuration = 0
         showVoicePreview = false
-        voicePlayer.cleanup()
+        // Cleanup (no longer needed for voice-to-text)
         print("🧹 Voice recording state cleaned up")
     }
 }
