@@ -41,81 +41,65 @@ struct ChatHeaderView: View {
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Back button
-            Button(action: { dismiss() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.body.weight(.semibold))
-                    Text("Back")
-                }
-                .foregroundColor(.blue)
-            }
-            
-            Spacer()
-            
-            // User info for 1-on-1 chats
-            if !conversation.isGroupChat, let userId = otherUserId {
-                HStack(spacing: 8) {
-                    // Profile icon with online status ring
-                    ZStack(alignment: .bottomTrailing) {
+        // User info for 1-on-1 chats
+        if !conversation.isGroupChat, let userId = otherUserId {
+            Button(action: {
+                // Future: Show user profile details
+            }) {
+                HStack(spacing: 10) {
+                    // Profile icon with online status halo
+                    ZStack {
+                        // Online status halo behind profile
+                        if isOnline {
+                            Circle()
+                                .fill(Color.green.opacity(0.3))
+                                .frame(width: 44, height: 44)
+                                .blur(radius: 4)
+                        }
+                        
                         // Profile photo or initial
                         ProfileIconWithCustomization(
                             userId: userId,
                             userName: otherUserName,
                             size: 36
                         )
-                        
-                        // Online status indicator
-                        Circle()
-                            .fill(isOnline ? Color.green : Color.gray)
-                            .frame(width: 12, height: 12)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white, lineWidth: 2)
-                            )
+                        .overlay(
+                            Circle()
+                                .stroke(isOnline ? Color.green : Color.clear, lineWidth: 2)
+                        )
                     }
                     
-                    VStack(alignment: .center, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(otherUserName)
                             .font(.headline)
                             .lineLimit(1)
+                            .foregroundColor(.primary)
                         
                         Text(isOnline ? "Online" : "Offline")
                             .font(.caption)
                             .foregroundColor(isOnline ? .green : .secondary)
                     }
                 }
-                .onTapGesture {
-                    // Future: Show user profile details
-                }
-            } else {
-                // Group chat header
+            }
+            .buttonStyle(PlainButtonStyle())
+        } else {
+            // Group chat header
+            Button(action: {
+                // Future: Show group details
+            }) {
                 VStack(spacing: 2) {
                     Text(conversation.groupName ?? "Group Chat")
                         .font(.headline)
                         .lineLimit(1)
+                        .foregroundColor(.primary)
                     
                     Text("\(conversation.participantIds.count) members")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            
-            Spacer()
-            
-            // Info button (placeholder for future features)
-            Button(action: {
-                // Future: Show conversation details
-            }) {
-                Image(systemName: "info.circle")
-                    .font(.title3)
-                    .foregroundColor(.blue)
-            }
+            .buttonStyle(PlainButtonStyle())
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.systemBackground))
     }
 }
 
