@@ -23,13 +23,21 @@ struct HomeView: View {
                 }
                 .tag(0)
             
+            // Contacts Tab
+            ContactsListView()
+                .tabItem {
+                    Image(systemName: "person.2.fill")
+                    Text("Contacts")
+                }
+                .tag(1)
+            
             // Profile Tab
             ProfileView()
                 .tabItem {
                     Image(systemName: "person.fill")
                     Text("Profile")
                 }
-                .tag(1)
+                .tag(2)
         }
         .preferredColorScheme(preferences.preferredColorScheme)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenConversation"))) { notification in
@@ -223,13 +231,13 @@ struct ProfileView: View {
                     ProgressRow(icon: "checkmark.circle.fill", text: "Local Database", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Draft Messages", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Real-Time Messaging", status: .complete, color: .green)
-                    ProgressRow(icon: "hammer.circle.fill", text: "Read Receipts & Timestamps", status: .inProgress, color: .blue)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Read Receipts & Timestamps", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Online/Offline Presence", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Typing Indicators", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Group Chat", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "Message Editing", status: .complete, color: .green)
                     ProgressRow(icon: "checkmark.circle.fill", text: "AI Translation & Slang", status: .complete, color: .green)
-                    ProgressRow(icon: "hammer.circle.fill", text: "Push Notifications", status: .inProgress, color: .blue)
+                    ProgressRow(icon: "checkmark.circle.fill", text: "Push Notifications", status: .complete, color: .green)
                 } header: {
                     Text("Development Progress")
                 }

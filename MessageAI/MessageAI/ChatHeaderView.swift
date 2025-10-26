@@ -14,6 +14,7 @@ struct ChatHeaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var showNicknameEditor = false
+    @State private var showGroupDetails = false
     
     private var otherUserId: String? {
         conversation.participantIds.first(where: { $0 != currentUserId })
@@ -39,6 +40,13 @@ struct ChatHeaderView: View {
             return userPresence[id] ?? false
         }
         return false
+    }
+    
+    // Count online members in group chat
+    private var onlineMembersCount: Int {
+        conversation.participantIds.filter { userId in
+            userPresence[userId] ?? false
+        }.count
     }
     
     var body: some View {
@@ -90,7 +98,7 @@ struct ChatHeaderView: View {
         } else {
             // Group chat header
             Button(action: {
-                // Future: Show group details
+                showGroupDetails = true
             }) {
                 VStack(spacing: 2) {
                     Text(conversation.groupName ?? "Group Chat")
@@ -98,12 +106,15 @@ struct ChatHeaderView: View {
                         .lineLimit(1)
                         .foregroundColor(.primary)
                     
-                    Text("\(conversation.participantIds.count) members")
+                    Text("\(onlineMembersCount) online")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(onlineMembersCount > 0 ? .green : .secondary)
                 }
             }
             .buttonStyle(PlainButtonStyle())
+            .sheet(isPresented: $showGroupDetails) {
+                GroupDetailsView(conversation: conversation)
+            }
         }
     }
 }

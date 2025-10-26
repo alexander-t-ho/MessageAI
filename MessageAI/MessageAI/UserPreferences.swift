@@ -61,22 +61,25 @@ class UserPreferences: ObservableObject {
     
     // Reload preferences (kept for compatibility, but now loads from global keys)
     func reloadForCurrentUser() {
-        // Reload profile picture
+        // Reload profile picture only if exists in UserDefaults
         if let data = UserDefaults.standard.data(forKey: "profileImageData") {
             self.profileImageData = data
-        } else {
-            self.profileImageData = nil
         }
+        // Don't reset to nil if not found - keep existing value
         
-        // Reload message color
-        self.messageBubbleColor = UserPreferences.loadColor(key: "messageBubbleColor") ?? .blue
+        // Reload message color only if exists in UserDefaults
+        if let savedColor = UserPreferences.loadColor(key: "messageBubbleColor") {
+            self.messageBubbleColor = savedColor
+        }
+        // Don't reset to default if not found - keep existing value
         
-        // Reload dark mode preference
+        // Reload dark mode preference only if exists in UserDefaults
         if let schemeString = UserDefaults.standard.string(forKey: "preferredColorScheme") {
             self.preferredColorScheme = schemeString == "dark" ? .dark : .light
-        } else {
-            self.preferredColorScheme = nil
         }
+        // Don't reset to nil if not found - keep existing value
+        
+        print("🔄 Reloaded preferences - Color: \(messageBubbleColor), Dark mode: \(String(describing: preferredColorScheme))")
     }
     
     // Save color to UserDefaults

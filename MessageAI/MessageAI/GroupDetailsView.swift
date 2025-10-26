@@ -102,7 +102,8 @@ struct GroupDetailsView: View {
                             userName: userName,
                             isOnline: onlineMembers.contains(userId),
                             isAdmin: conversation.groupAdmins.contains(userId),
-                            isCurrentUser: userId == authViewModel.currentUser?.id
+                            isCurrentUser: userId == authViewModel.currentUser?.id,
+                            modelContext: modelContext
                         )
                     }
                     
@@ -129,10 +130,31 @@ struct GroupDetailsView: View {
                     }
                 }
                 
-                // Settings section
+                // Options section
                 Section {
+                    // Mute notifications
                     Button(action: {
-                        // Leave group functionality
+                        // TODO: Implement mute functionality
+                        print("Mute notifications tapped")
+                    }) {
+                        HStack {
+                            Image(systemName: "bell.slash.fill")
+                                .foregroundColor(.orange)
+                            Text("Mute Notifications")
+                        }
+                    }
+                    
+                    // View all read receipts
+                    NavigationLink(destination: GroupReadReceiptsView(conversation: conversation)) {
+                        HStack {
+                            Image(systemName: "eye.fill")
+                                .foregroundColor(.blue)
+                            Text("View Read Receipts")
+                        }
+                    }
+                    
+                    // Leave group (delete-style action at bottom)
+                    Button(action: {
                         leaveGroup()
                     }) {
                         HStack {
@@ -143,7 +165,7 @@ struct GroupDetailsView: View {
                         }
                     }
                 } header: {
-                    Text("Settings")
+                    Text("Options")
                 }
             }
             .navigationTitle("Group Details")
@@ -239,6 +261,16 @@ struct MemberRow: View {
     let isOnline: Bool
     let isAdmin: Bool
     let isCurrentUser: Bool
+    let modelContext: ModelContext
+    
+    // Get display name (nickname if set, otherwise real name)
+    private var displayName: String {
+        UserCustomizationManager.shared.getNickname(
+            for: userId,
+            realName: userName,
+            modelContext: modelContext
+        )
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -248,7 +280,7 @@ struct MemberRow: View {
                     .fill(Color.blue.opacity(0.2))
                     .frame(width: 44, height: 44)
                     .overlay(
-                        Text(userName.prefix(1).uppercased())
+                        Text(displayName.prefix(1).uppercased())
                             .font(.headline)
                             .foregroundColor(.blue)
                     )
@@ -267,7 +299,7 @@ struct MemberRow: View {
             // User info
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text(userName)
+                    Text(displayName)
                         .font(.body)
                     
                     if isCurrentUser {
@@ -281,6 +313,13 @@ struct MemberRow: View {
                             .font(.caption)
                             .foregroundColor(.yellow)
                     }
+                }
+                
+                // Show real name if nickname is set
+                if displayName != userName {
+                    Text(userName)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
                 }
                 
                 Text(isOnline ? "Active now" : "Offline")

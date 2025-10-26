@@ -192,7 +192,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         
-        print("📬 Received notification in foreground: \(notification.request.content.body)")
+        print("📬 Received notification: \(notification.request.content.body)")
         
         // Update badge count if specified in notification
         if let badgeNumber = notification.request.content.badge {
@@ -202,27 +202,50 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         // Get conversation ID from notification
         let notificationConversationId = notification.request.content.userInfo["conversationId"] as? String
         
-        // Determine if we should show banner
-        // Don't show banner if user is currently in the conversation that the message is for
-        var shouldShowBanner = true
+        // Check application state
+        let appState = UIApplication.shared.applicationState
         
-        // Check if we're in a specific conversation
-        if let currentConvId = UserDefaults.standard.string(forKey: "currentConversationId"),
-           let notifConvId = notificationConversationId,
-           currentConvId == notifConvId {
-            shouldShowBanner = false
-            print("🔕 Suppressing notification banner - user is viewing this conversation")
+        print("📱 App state: \(appState == .active ? "active" : appState == .background ? "background" : "inactive")")
+        
+        // Determine if we should show banner based on app state and current conversation
+        var shouldShowBanner = true
+        var shouldPlaySound = true
+        
+        if appState == .active {
+            // App is in foreground - check if user is viewing this conversation
+            if let currentConvId = UserDefaults.standard.string(forKey: "currentConversationId"),
+               let notifConvId = notificationConversationId,
+               currentConvId == notifConvId {
+                // User is actively viewing this conversation - don't show banner or sound
+                shouldShowBanner = false
+                shouldPlaySound = false
+                print("🔕 Suppressing banner & sound - user is viewing this conversation")
+            } else {
+                // User is in app but different conversation - show banner
+                print("🔔 Showing banner - user in different conversation")
+            }
+        } else {
+            // App is in background or inactive - always show banner
+            print("🔔 Showing banner - app in background/inactive")
         }
         
-        // Configure presentation options
+        // Configure presentation options based on state
+        var options: UNNotificationPresentationOptions = [.badge, .list]
+        
         if shouldShowBanner {
-            // Show banner only when not in the conversation
-            completionHandler([.banner, .sound, .badge, .list])
-            print("🔔 Showing notification banner")
+            options.insert(.banner)
+        }
+        
+        if shouldPlaySound {
+            options.insert(.sound)
+        }
+        
+        completionHandler(options)
+        
+        if shouldShowBanner {
+            print("✅ Notification shown with banner")
         } else {
-            // Just update badge and list, no banner or sound
-            completionHandler([.badge, .list])
-            print("🔕 Banner suppressed - showing badge only")
+            print("✅ Notification shown without banner (badge only)")
         }
     }
     
