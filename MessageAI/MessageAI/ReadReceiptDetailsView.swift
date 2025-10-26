@@ -52,15 +52,10 @@ struct ReadReceiptDetailsView: View {
                             
                             Spacer()
                             
-                            // Timestamp
-                            if let timestamps = message.readTimestamps,
-                               let userId = getUserId(for: name),
-                               let timestamp = timestamps[userId],
-                               let date = ISO8601DateFormatter().date(from: timestamp) {
-                                Text(formatTime(date))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
+                            // Checkmark indicator
+                            Image(systemName: "checkmark")
+                                .font(.caption)
+                                .foregroundColor(.green)
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 12)
