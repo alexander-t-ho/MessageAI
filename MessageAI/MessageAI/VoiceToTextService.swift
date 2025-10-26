@@ -8,6 +8,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import Combine
 
 class VoiceToTextService: NSObject, ObservableObject {
     @Published var isTranscribing = false
