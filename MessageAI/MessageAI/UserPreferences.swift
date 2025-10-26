@@ -41,20 +41,13 @@ class UserPreferences: ObservableObject {
     }
     
     private init() {
-        // Load profile picture
-        if let data = UserDefaults.standard.data(forKey: userKey("profileImageData")) {
-            self.profileImageData = data
-        }
+        // Initialize with defaults first
+        self.profileImageData = nil
+        self.messageBubbleColor = .blue
+        self.preferredColorScheme = nil
         
-        // Load message color
-        self.messageBubbleColor = self.loadColor(key: "messageBubbleColor") ?? .blue
-        
-        // Load dark mode preference
-        if let schemeString = UserDefaults.standard.string(forKey: userKey("preferredColorScheme")) {
-            self.preferredColorScheme = schemeString == "dark" ? .dark : .light
-        } else {
-            self.preferredColorScheme = nil // System default
-        }
+        // Then load saved preferences
+        self.reloadForCurrentUser()
     }
     
     // Helper to create user-specific keys
