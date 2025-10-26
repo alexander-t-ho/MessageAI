@@ -44,6 +44,13 @@ final class MessageData {
     var isEmphasized: Bool // True if message has emphasis
     var emphasizedBy: [String] // Array of user IDs who emphasized this message
     
+    // Voice message fields
+    var messageType: String? // "text" or "voice"
+    var audioUrl: String? // S3 URL or local file path
+    var audioDuration: Double? // Duration in seconds
+    var transcript: String? // Voice-to-text transcription
+    var isTranscribing: Bool = false // True while transcribing
+    
     init(
         id: String = UUID().uuidString,
         conversationId: String,
@@ -64,7 +71,12 @@ final class MessageData {
         isEdited: Bool = false,
         editedAt: Date? = nil,
         isEmphasized: Bool = false,
-        emphasizedBy: [String] = []
+        emphasizedBy: [String] = [],
+        messageType: String? = nil,
+        audioUrl: String? = nil,
+        audioDuration: Double? = nil,
+        transcript: String? = nil,
+        isTranscribing: Bool = false
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -87,11 +99,21 @@ final class MessageData {
         self.editedAt = editedAt
         self.isEmphasized = isEmphasized
         self.emphasizedBy = emphasizedBy
+        self.messageType = messageType
+        self.audioUrl = audioUrl
+        self.audioDuration = audioDuration
+        self.transcript = transcript
+        self.isTranscribing = isTranscribing
     }
     
     // Helper method to check if message was sent by a specific user
     func isSentBy(userId: String) -> Bool {
         return senderId == userId
+    }
+    
+    // Helper to check if this is a voice message
+    var isVoiceMessage: Bool {
+        return messageType == "voice"
     }
 }
 
