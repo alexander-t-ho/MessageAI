@@ -21,7 +21,7 @@ class VoiceToTextService: NSObject, ObservableObject {
     
     override init() {
         super.init()
-        requestSpeechRecognitionPermission()
+        // Don't request permissions immediately - wait until first use
     }
     
     /// Request permission for speech recognition
@@ -52,6 +52,13 @@ class VoiceToTextService: NSObject, ObservableObject {
     func transcribeAudioFile(url: URL, completion: @escaping (Result<String, Error>) -> Void) {
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
             completion(.failure(VoiceToTextError.speechRecognizerNotAvailable))
+            return
+        }
+        
+        // Request permissions if not already authorized
+        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+            requestSpeechRecognitionPermission()
+            completion(.failure(VoiceToTextError.permissionDenied))
             return
         }
         

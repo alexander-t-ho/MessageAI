@@ -18,7 +18,7 @@ struct ChatView: View {
     @StateObject private var aiService = AITranslationService.shared
     @StateObject private var preferences = UserPreferences.shared
     @StateObject private var voiceRecorder = VoiceMessageRecorder()
-    @StateObject private var voiceToTextService = VoiceToTextService()
+    // @StateObject private var voiceToTextService = VoiceToTextService() // Temporarily disabled
     @Query private var allMessages: [MessageData]
     @Query private var allConversations: [ConversationData]
     @Query private var pendingAll: [PendingMessageData]
@@ -1615,21 +1615,25 @@ struct ChatView: View {
         // Generate unique message ID
         let messageId = UUID().uuidString
         
-        // Convert voice to text
-        voiceToTextService.transcribeAudioFile(url: audioURL) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let transcribedText):
-                    print("✅ Voice transcribed successfully: \(transcribedText)")
-                    sendTranscribedText(transcribedText: transcribedText, messageId: messageId)
-                case .failure(let error):
-                    print("❌ Voice transcription failed: \(error)")
-                    // Fallback to placeholder text
-                    sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
-                }
-                cleanupVoiceRecording()
-            }
-        }
+        // Convert voice to text - TEMPORARILY DISABLED TO FIX CRASH
+        // voiceToTextService.transcribeAudioFile(url: audioURL) { result in
+        //     DispatchQueue.main.async {
+        //         switch result {
+        //         case .success(let transcribedText):
+        //             print("✅ Voice transcribed successfully: \(transcribedText)")
+        //             sendTranscribedText(transcribedText: transcribedText, messageId: messageId)
+        //         case .failure(let error):
+        //             print("❌ Voice transcription failed: \(error)")
+        //             // Fallback to placeholder text
+        //             sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
+        //         }
+        //         cleanupVoiceRecording()
+        //     }
+        // }
+        
+        // TEMPORARY FIX: Send placeholder text instead
+        sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
+        cleanupVoiceRecording()
     }
     
     private func sendTranscribedText(transcribedText: String, messageId: String) {
