@@ -1,10 +1,12 @@
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 struct MessageTranslationView: View {
     let message: MessageData
     let isFromCurrentUser: Bool
     @StateObject private var aiService = AITranslationService.shared
+    @StateObject private var ttsService = TextToSpeechService.shared
     @State private var showTranslation = false
     @State private var showCulturalHints = false
     @State private var isTranslating = false
@@ -37,6 +39,9 @@ struct MessageTranslationView: View {
             if showCulturalHints, let hints = aiService.culturalHints[message.id] {
                 culturalHintsView(hints)
             }
+        }
+        .onDisappear {
+            ttsService.cleanup()
         }
     }
     
@@ -165,6 +170,21 @@ struct MessageTranslationView: View {
                 Text("Translated to \(aiService.preferredLanguage.displayName)")
                     .font(.caption2)
                     .foregroundColor(.blue)
+                
+                Spacer()
+                
+                // Speaker button for text-to-speech
+                Button(action: {
+                    let translatedText = translation.translatedText ?? message.content
+                    let detectedLanguage = translation.detectedLanguage ?? aiService.preferredLanguage.rawValue
+                    ttsService.toggleSpeech(for: translatedText, language: detectedLanguage)
+                }) {
+                    Image(systemName: ttsService.isSpeaking && ttsService.currentText == (translation.translatedText ?? message.content) ? "speaker.wave.2.fill" : "speaker.wave.2")
+                        .font(.system(size: 12))
+                        .foregroundColor(ttsService.isSpeaking && ttsService.currentText == (translation.translatedText ?? message.content) ? .blue : .gray)
+                        .animation(.easeInOut(duration: 0.2), value: ttsService.isSpeaking)
+                }
+                .buttonStyle(PlainButtonStyle())
                 
                 if translation.fromCache == true {
                     Image(systemName: "clock.arrow.circlepath")

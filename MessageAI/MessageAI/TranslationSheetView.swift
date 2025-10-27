@@ -1,10 +1,12 @@
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 struct TranslationSheetView: View {
     let message: MessageData
     let translationType: TranslationType
     @StateObject private var aiService = AITranslationService.shared
+    @StateObject private var ttsService = TextToSpeechService.shared
     @EnvironmentObject var webSocketService: WebSocketService
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = false
@@ -45,6 +47,7 @@ struct TranslationSheetView: View {
                 }
                 .onDisappear {
                     loadingTimer?.invalidate()
+                    ttsService.cleanup()
                 }
         }
     }
@@ -169,9 +172,26 @@ struct TranslationSheetView: View {
     @ViewBuilder
     private func translationContent(_ trans: TranslationResult) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(trans.translatedText ?? message.content)
-                .font(.title3)
-                .fontWeight(.medium)
+            HStack {
+                Text(trans.translatedText ?? message.content)
+                    .font(.title3)
+                    .fontWeight(.medium)
+                
+                Spacer()
+                
+                // Speaker button for text-to-speech
+                Button(action: {
+                    let translatedText = trans.translatedText ?? message.content
+                    let detectedLanguage = trans.detectedLanguage ?? aiService.preferredLanguage.rawValue
+                    ttsService.toggleSpeech(for: translatedText, language: detectedLanguage)
+                }) {
+                    Image(systemName: ttsService.isSpeaking && ttsService.currentText == (trans.translatedText ?? message.content) ? "speaker.wave.2.fill" : "speaker.wave.2")
+                        .font(.system(size: 16))
+                        .foregroundColor(ttsService.isSpeaking && ttsService.currentText == (trans.translatedText ?? message.content) ? .blue : .gray)
+                        .animation(.easeInOut(duration: 0.2), value: ttsService.isSpeaking)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
             
             if let confidence = trans.confidence {
                 HStack {
