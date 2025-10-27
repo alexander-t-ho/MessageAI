@@ -16,7 +16,6 @@ class VoiceToTextService: NSObject, ObservableObject {
     @Published var errorMessage: String?
     
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     
     override init() {
@@ -92,53 +91,72 @@ class VoiceToTextService: NSObject, ObservableObject {
     }
     
     private func performTranscription(url: URL, completion: @escaping (Result<String, Error>) -> Void) {
+        // Validate audio file exists and is accessible
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            DispatchQueue.main.async {
+                self.isTranscribing = false
+                self.errorMessage = "Audio file not found"
+                completion(.failure(VoiceToTextError.noResult))
+            }
+            return
+        }
         
         DispatchQueue.main.async {
             self.isTranscribing = true
             self.errorMessage = nil
         }
         
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        
-        guard let recognitionRequest = recognitionRequest else {
-            completion(.failure(VoiceToTextError.recognitionRequestFailed))
-            return
-        }
-        
-        recognitionRequest.shouldReportPartialResults = false
-        
         // Create audio file recognition request
         let fileRecognitionRequest = SFSpeechURLRecognitionRequest(url: url)
         fileRecognitionRequest.shouldReportPartialResults = false
         
-        recognitionTask = speechRecognizer?.recognitionTask(with: fileRecognitionRequest) { [weak self] result, error in
-            DispatchQueue.main.async {
-                self?.isTranscribing = false
-                
-                if let error = error {
-                    print("❌ Speech recognition error: \(error)")
-                    completion(.failure(error))
-                    return
+        // Perform recognition on background queue to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.recognitionTask = self.speechRecognizer?.recognitionTask(with: fileRecognitionRequest) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    self.isTranscribing = false
+                    
+                    if let error = error {
+                        print("❌ Speech recognition error: \(error)")
+                        self.errorMessage = "Transcription failed: \(error.localizedDescription)"
+                        completion(.failure(error))
+                        return
+                    }
+                    
+                    guard let result = result else {
+                        print("❌ No recognition result")
+                        self.errorMessage = "No transcription result"
+                        completion(.failure(VoiceToTextError.noResult))
+                        return
+                    }
+                    
+                    if result.isFinal {
+                        let transcribedText = result.bestTranscription.formattedString
+                        print("✅ Transcription completed: \(transcribedText)")
+                        completion(.success(transcribedText))
+                    }
                 }
-                
-                guard let result = result else {
+            }
+            
+            // Add timeout to prevent hanging
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+                if self.isTranscribing {
+                    print("⏰ Transcription timeout - cancelling")
+                    self.recognitionTask?.cancel()
+                    self.isTranscribing = false
+                    self.errorMessage = "Transcription timeout"
                     completion(.failure(VoiceToTextError.noResult))
-                    return
                 }
-                
-                let transcribedText = result.bestTranscription.formattedString
-                print("✅ Transcribed text: \(transcribedText)")
-                completion(.success(transcribedText))
             }
         }
     }
     
-    /// Cancel current transcription
     /// Cancel ongoing transcription
     func cancelTranscription() {
         recognitionTask?.cancel()
         recognitionTask = nil
-        recognitionRequest = nil
         
         DispatchQueue.main.async {
             self.isTranscribing = false

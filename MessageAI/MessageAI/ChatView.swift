@@ -562,6 +562,15 @@ struct ChatView: View {
                                 }
                             }
                     )
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { _ in
+                                // Release gesture - stop voice recording if recording
+                                if isRecordingVoice {
+                                    stopVoiceRecording()
+                                }
+                            }
+                    )
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -1539,10 +1548,12 @@ struct ChatView: View {
                 print("✅ Voice message recorded: \(String(format: "%.1f", duration))s")
                 recordedVoiceURL = audioURL
                 recordedVoiceDuration = duration
-                showVoicePreview = true
                 
                 print("📁 Voice file saved at: \(audioURL.path)")
-                print("🎧 Entering preview mode")
+                print("🎤 Sending voice message for transcription")
+                
+                // Send the voice message for transcription instead of preview mode
+                sendVoiceMessage(audioURL: audioURL, duration: duration)
             } else {
                 print("⚠️ Recording too short (< 1s), cancelling")
                 voiceRecorder.cancelRecording()
