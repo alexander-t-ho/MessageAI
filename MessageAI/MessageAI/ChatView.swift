@@ -1524,10 +1524,14 @@ struct ChatView: View {
     // MARK: - Voice Message Functions
     
     private func startVoiceRecording() {
-        guard !voiceRecorder.isRecording else { return }
+        guard !voiceRecorder.isRecording else { 
+            print("⚠️ Recording already in progress - ignoring start request")
+            return 
+        }
         
         // Check permission first
         guard voiceRecorder.hasPermission else {
+            print("❌ No microphone permission - requesting...")
             voiceRecorder.requestMicrophonePermission()
             return
         }
@@ -1547,28 +1551,35 @@ struct ChatView: View {
         
         let duration = voiceRecorder.recordingDuration
         
-        // Use a safer approach to stop recording
-        DispatchQueue.main.async {
-            if let audioURL = self.voiceRecorder.stopRecording() {
-                // Check minimum duration (1 second)
-                if duration >= 1.0 {
-                    print("✅ Voice message recorded: \(String(format: "%.1f", duration))s")
-                    self.recordedVoiceURL = audioURL
-                    self.recordedVoiceDuration = duration
-                    
-                    print("📁 Voice file saved at: \(audioURL.path)")
-                    print("🎤 Sending voice message for transcription")
-                    
-                    // Send the voice message for transcription instead of preview mode
+        // Step 1: Cancel any ongoing transcription first
+        print("🔧 Step 1: Cancelling ongoing transcription...")
+        voiceToTextService.cancelTranscription()
+        print("✅ Transcription cancelled")
+        
+        // Step 2: Stop recording
+        print("🔧 Step 2: Stopping voice recording...")
+        if let audioURL = voiceRecorder.stopRecording() {
+            // Check minimum duration (1 second)
+            if duration >= 1.0 {
+                print("✅ Voice message recorded: \(String(format: "%.1f", duration))s")
+                recordedVoiceURL = audioURL
+                recordedVoiceDuration = duration
+                
+                print("📁 Voice file saved at: \(audioURL.path)")
+                print("🎤 Sending voice message for transcription")
+                
+                // Step 3: Add delay before starting transcription
+                print("🔧 Step 3: Adding 0.1s delay before transcription...")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.sendVoiceMessage(audioURL: audioURL, duration: duration)
-                } else {
-                    print("⚠️ Recording too short (< 1s), cancelling")
-                    self.voiceRecorder.cancelRecording()
                 }
             } else {
-                print("❌ Failed to stop recording - no audio file returned")
-                self.voiceRecorder.cancelRecording()
+                print("⚠️ Recording too short (< 1s), cancelling")
+                voiceRecorder.cancelRecording()
             }
+        } else {
+            print("❌ Failed to stop recording - no audio file returned")
+            voiceRecorder.cancelRecording()
         }
     }
     
@@ -1845,12 +1856,21 @@ struct ChatView: View {
     }
     
     private func cleanupVoiceRecording() {
-        // Reset all voice recording state
+        print("🔧 Cleaning up voice recording...")
+        
+        // Step 1: Cancel any ongoing transcription
+        print("🔧 Step 1: Cancelling transcription...")
+        voiceToTextService.cancelTranscription()
+        print("✅ Transcription cancelled")
+        
+        // Step 2: Reset all voice recording state
+        print("🔧 Step 2: Resetting recording state...")
         recordedVoiceURL = nil
         recordedVoiceDuration = 0
         showVoicePreview = false
-        // Cleanup (no longer needed for voice-to-text)
-        print("🧹 Voice recording state cleaned up")
+        print("✅ Recording state reset")
+        
+        print("🧹 Voice recording cleanup completed")
     }
 }
 

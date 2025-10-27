@@ -89,6 +89,11 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
             return
         }
         
+        guard !isRecording else {
+            print("⚠️ Recording already in progress - ignoring start request")
+            return
+        }
+        
         // Configure audio session
         let audioSession = AVAudioSession.sharedInstance()
         do {
@@ -143,19 +148,26 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
     }
     
     func stopRecording() -> URL? {
-        guard isRecording else { return nil }
+        guard isRecording else { 
+            print("⚠️ No recording in progress - ignoring stop request")
+            return nil 
+        }
         
         print("🎤 Stopping recording...")
         
-        // Stop timers first
+        // Step 1: Stop timers first
+        print("🔧 Step 1: Stopping timers...")
         recordingTimer?.invalidate()
         levelTimer?.invalidate()
         recordingTimer = nil
         levelTimer = nil
+        print("✅ Timers stopped")
         
-        // Stop recording
+        // Step 2: Stop recording
+        print("🔧 Step 2: Stopping audio recorder...")
         audioRecorder?.stop()
         isRecording = false
+        print("✅ Audio recorder stopped")
         
         let url = currentRecordingURL
         let duration = recordingDuration
@@ -163,11 +175,14 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
         print("🎤 Stopped recording - Duration: \(String(format: "%.1f", duration))s")
         print("📁 File: \(url?.lastPathComponent ?? "unknown")")
         
-        // Reset state
+        // Step 3: Reset state
+        print("🔧 Step 3: Resetting state...")
         recordingDuration = 0
         audioLevel = 0
+        print("✅ State reset")
         
-        // Deactivate audio session on background queue to prevent crashes
+        // Step 4: Deactivate audio session on background queue to prevent crashes
+        print("🔧 Step 4: Deactivating audio session...")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try AVAudioSession.sharedInstance().setActive(false)
@@ -181,31 +196,47 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
     }
     
     func cancelRecording() {
-        guard isRecording else { return }
+        guard isRecording else { 
+            print("⚠️ No recording in progress - ignoring cancel request")
+            return 
+        }
         
         print("🗑️ Cancelling recording...")
         
-        // Stop timers first
+        // Step 1: Stop timers first
+        print("🔧 Step 1: Stopping timers...")
         recordingTimer?.invalidate()
         levelTimer?.invalidate()
         recordingTimer = nil
         levelTimer = nil
+        print("✅ Timers stopped")
         
-        // Stop recording
+        // Step 2: Stop recording
+        print("🔧 Step 2: Stopping audio recorder...")
         audioRecorder?.stop()
         isRecording = false
+        print("✅ Audio recorder stopped")
         
-        // Delete the recording file
+        // Step 3: Delete the recording file
+        print("🔧 Step 3: Deleting recording file...")
         if let url = currentRecordingURL {
-            try? FileManager.default.removeItem(at: url)
-            print("🗑️ Cancelled recording, deleted file")
+            do {
+                try FileManager.default.removeItem(at: url)
+                print("✅ Recording file deleted: \(url.lastPathComponent)")
+            } catch {
+                print("❌ Failed to delete recording file: \(error)")
+            }
         }
         
+        // Step 4: Reset state
+        print("🔧 Step 4: Resetting state...")
         currentRecordingURL = nil
         recordingDuration = 0
         audioLevel = 0
+        print("✅ State reset")
         
-        // Deactivate audio session on background queue to prevent crashes
+        // Step 5: Deactivate audio session on background queue to prevent crashes
+        print("🔧 Step 5: Deactivating audio session...")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try AVAudioSession.sharedInstance().setActive(false)

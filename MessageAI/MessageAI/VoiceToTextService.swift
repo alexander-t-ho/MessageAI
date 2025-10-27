@@ -153,12 +153,20 @@ class VoiceToTextService: NSObject, ObservableObject {
     
     /// Cancel ongoing transcription
     func cancelTranscription() {
+        print("🔧 Cancelling transcription...")
+        
+        // Step 1: Cancel recognition task
+        print("🔧 Step 1: Cancelling recognition task...")
         recognitionTask?.cancel()
         recognitionTask = nil
+        print("✅ Recognition task cancelled")
         
+        // Step 2: Reset state
+        print("🔧 Step 2: Resetting transcription state...")
         DispatchQueue.main.async {
             self.isTranscribing = false
             self.errorMessage = "Transcription cancelled"
+            print("✅ Transcription state reset")
         }
     }
 }
