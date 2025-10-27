@@ -60,7 +60,7 @@ class VoiceToTextService: NSObject, ObservableObject {
     
     /// Convert audio file to text
     func transcribeAudioFile(url: URL, completion: @escaping (Result<String, Error>) -> Void) {
-        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             print("❌ Speech recognizer not available")
             completion(.failure(VoiceToTextError.speechRecognizerNotAvailable))
             return
