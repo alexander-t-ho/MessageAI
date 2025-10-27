@@ -15,7 +15,7 @@ class VoiceToTextService: NSObject, ObservableObject {
     @Published var transcribedText = ""
     @Published var errorMessage: String?
     
-    private let speechRecognizer: SFSpeechRecognizer?
+    private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionTask: SFSpeechRecognitionTask?
     
     override init() {
