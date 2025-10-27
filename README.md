@@ -49,6 +49,7 @@ The app has been rebranded to **Cloudy** ☁️ - Nothing like a message to brig
 - ✅ Powered by OpenAI GPT-4
 - ✅ DynamoDB-based slang database (21 terms)
 - ✅ WebSocket integration for real-time AI
+- ✅ **Voice-to-Text Transcription** - Convert voice messages to text
 
 ### Cloudy Branding & Customization (Phase 10) ✅
 - ✅ Beautiful cloud icon with sunset gradient
@@ -109,7 +110,7 @@ The app has been rebranded to **Cloudy** ☁️ - Nothing like a message to brig
 ### 📋 Phase 11: Extra Features (Planned)
 - Message search
 - Media attachments (images, videos)
-- Voice messages
+- ~~Voice messages~~ ✅ **Voice-to-Text implemented**
 - Message reactions
 - User blocking
 - Chat archiving
@@ -198,7 +199,7 @@ Cloudy/ (repository: MessageAI)
 - **Translation**: Translate any message to 25+ languages
 - **Slang Detection**: Understand modern slang and informal language
 - **Cultural Context**: Get explanations in your language
-- **Smart Replies**: AI-suggested responses (coming soon)
+- **Voice-to-Text**: Record voice messages and convert them to text
 - **Language Preferences**: Set preferred translation language
 
 ### Personalization
@@ -336,6 +337,13 @@ All documentation is in `Guides and Build Strategies/`:
 
 ## 🚀 Recent Updates
 
+### October 26, 2025 - Voice-to-Text Feature ✅
+- Implemented voice message recording
+- Added speech recognition transcription
+- Voice messages convert to text automatically
+- Removed unused Smart Reply functionality
+- Fixed compilation errors and cleaned up codebase
+
 ### October 25, 2025 - AI Translation & RAG Pipeline ✅
 - Implemented AI translation to 25+ languages
 - Built RAG pipeline for slang detection
@@ -381,4 +389,4 @@ Building a modern, AI-powered messaging experience.
 ---
 
 **Status**: Active development - Phase 10 in progress  
-**Last Updated**: October 25, 2025
+**Last Updated**: October 26, 2025

@@ -815,8 +815,7 @@ class WebSocketService: ObservableObject {
                         hints: nil,
                         adjustedText: nil,
                         originalLevel: nil,
-                        changes: nil,
-                        replies: nil
+                        changes: nil
                     )
                     AITranslationService.shared.translations[messageId] = translationResult
                 } else {

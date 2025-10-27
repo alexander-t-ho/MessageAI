@@ -345,8 +345,7 @@ struct MessageTranslationView: View {
                     hints: nil,
                     adjustedText: nil,
                     originalLevel: nil,
-                    changes: nil,
-                    replies: nil
+                    changes: nil
                 )
                 
                 // Create new result with adjusted text
@@ -359,8 +358,7 @@ struct MessageTranslationView: View {
                     hints: updatedTranslation.hints,
                     adjustedText: adjustedText,
                     originalLevel: "neutral",
-                    changes: ["Formality adjusted to \(level)"],
-                    replies: updatedTranslation.replies
+                    changes: ["Formality adjusted to \(level)"]
                 )
             }
             isTranslating = false
