@@ -1637,7 +1637,7 @@ struct ChatView: View {
         // Generate unique message ID
         let messageId = UUID().uuidString
         
-        // Convert voice to text
+        // Convert voice to text with timeout protection
         voiceToTextService.transcribeAudioFile(url: audioURL) { result in
             DispatchQueue.main.async {
                 switch result {
@@ -1649,6 +1649,16 @@ struct ChatView: View {
                     // Fallback to placeholder text
                     sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
                 }
+                cleanupVoiceRecording()
+            }
+        }
+        
+        // Add a safety timeout to prevent hanging
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            if voiceToTextService.isTranscribing {
+                print("⏰ Transcription timeout - falling back to placeholder")
+                voiceToTextService.cancelTranscription()
+                sendVoiceToTextPlaceholder(duration: duration, messageId: messageId)
                 cleanupVoiceRecording()
             }
         }

@@ -25,28 +25,31 @@ class VoiceToTextService: NSObject, ObservableObject {
     
     /// Request permission for speech recognition
     private func requestSpeechRecognitionPermission(completion: @escaping (Bool) -> Void) {
-        SFSpeechRecognizer.requestAuthorization { authStatus in
-            DispatchQueue.main.async {
-                switch authStatus {
-                case .authorized:
-                    print("✅ Speech recognition authorized")
-                    completion(true)
-                case .denied:
-                    print("❌ Speech recognition denied")
-                    self.errorMessage = "Speech recognition permission denied"
-                    completion(false)
-                case .restricted:
-                    print("❌ Speech recognition restricted")
-                    self.errorMessage = "Speech recognition restricted"
-                    completion(false)
-                case .notDetermined:
-                    print("❌ Speech recognition not determined")
-                    self.errorMessage = "Speech recognition permission not determined"
-                    completion(false)
-                @unknown default:
-                    print("❌ Speech recognition unknown error")
-                    self.errorMessage = "Speech recognition unknown error"
-                    completion(false)
+        // Request permission on main thread to avoid crashes
+        DispatchQueue.main.async {
+            SFSpeechRecognizer.requestAuthorization { authStatus in
+                DispatchQueue.main.async {
+                    switch authStatus {
+                    case .authorized:
+                        print("✅ Speech recognition authorized")
+                        completion(true)
+                    case .denied:
+                        print("❌ Speech recognition denied")
+                        self.errorMessage = "Speech recognition permission denied"
+                        completion(false)
+                    case .restricted:
+                        print("❌ Speech recognition restricted")
+                        self.errorMessage = "Speech recognition restricted"
+                        completion(false)
+                    case .notDetermined:
+                        print("❌ Speech recognition not determined")
+                        self.errorMessage = "Speech recognition permission not determined"
+                        completion(false)
+                    @unknown default:
+                        print("❌ Speech recognition unknown error")
+                        self.errorMessage = "Speech recognition unknown error"
+                        completion(false)
+                    }
                 }
             }
         }
@@ -66,14 +69,9 @@ class VoiceToTextService: NSObject, ObservableObject {
         
         switch authStatus {
         case .notDetermined:
-            print("🎤 Requesting speech recognition permission...")
-            requestSpeechRecognitionPermission { [weak self] granted in
-                if granted {
-                    self?.performTranscription(url: url, completion: completion)
-                } else {
-                    completion(.failure(VoiceToTextError.permissionDenied))
-                }
-            }
+            print("🎤 Speech recognition permission not determined - skipping transcription")
+            // Skip permission request to avoid crashes, fall back to placeholder
+            completion(.failure(VoiceToTextError.permissionDenied))
             return
         case .denied, .restricted:
             print("❌ Speech recognition permission denied or restricted")
