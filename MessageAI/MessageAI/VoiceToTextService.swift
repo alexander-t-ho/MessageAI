@@ -66,12 +66,19 @@ class VoiceToTextService: NSObject, ObservableObject {
         // Handle permission status
         let authStatus = SFSpeechRecognizer.authorizationStatus()
         print("🎤 Speech recognition authorization status: \(authStatus.rawValue)")
+        print("🎤 Speech recognizer available: \(speechRecognizer?.isAvailable ?? false)")
         
         switch authStatus {
         case .notDetermined:
-            print("🎤 Speech recognition permission not determined - skipping transcription")
-            // Skip permission request to avoid crashes, fall back to placeholder
-            completion(.failure(VoiceToTextError.permissionDenied))
+            print("🎤 Speech recognition permission not determined - attempting safe permission request")
+            // Try a safer permission request approach
+            requestSpeechRecognitionPermissionSafely { [weak self] granted in
+                if granted {
+                    self?.performTranscription(url: url, completion: completion)
+                } else {
+                    completion(.failure(VoiceToTextError.permissionDenied))
+                }
+            }
             return
         case .denied, .restricted:
             print("❌ Speech recognition permission denied or restricted")
@@ -167,6 +174,56 @@ class VoiceToTextService: NSObject, ObservableObject {
             self.isTranscribing = false
             self.errorMessage = "Transcription cancelled"
             print("✅ Transcription state reset")
+        }
+    }
+    
+    /// Request permission for speech recognition with safer approach
+    private func requestSpeechRecognitionPermissionSafely(completion: @escaping (Bool) -> Void) {
+        print("🎤 Attempting safe speech recognition permission request...")
+        
+        // Use a timeout to prevent hanging
+        var permissionCompleted = false
+        let timeout: TimeInterval = 10.0
+        
+        DispatchQueue.main.async {
+            SFSpeechRecognizer.requestAuthorization { authStatus in
+                guard !permissionCompleted else { return }
+                permissionCompleted = true
+                
+                DispatchQueue.main.async {
+                    switch authStatus {
+                    case .authorized:
+                        print("✅ Speech recognition authorized safely")
+                        completion(true)
+                    case .denied:
+                        print("❌ Speech recognition denied")
+                        self.errorMessage = "Speech recognition permission denied"
+                        completion(false)
+                    case .restricted:
+                        print("❌ Speech recognition restricted")
+                        self.errorMessage = "Speech recognition restricted"
+                        completion(false)
+                    case .notDetermined:
+                        print("❌ Speech recognition still not determined")
+                        self.errorMessage = "Speech recognition permission not determined"
+                        completion(false)
+                    @unknown default:
+                        print("❌ Speech recognition unknown error")
+                        self.errorMessage = "Speech recognition unknown error"
+                        completion(false)
+                    }
+                }
+            }
+        }
+        
+        // Add timeout protection
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+            if !permissionCompleted {
+                print("⏰ Speech recognition permission request timed out")
+                permissionCompleted = true
+                self.errorMessage = "Speech recognition permission request timed out"
+                completion(false)
+            }
         }
     }
 }
