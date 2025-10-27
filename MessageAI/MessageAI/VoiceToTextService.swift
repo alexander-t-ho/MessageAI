@@ -25,24 +25,29 @@ class VoiceToTextService: NSObject, ObservableObject {
     }
     
     /// Request permission for speech recognition
-    private func requestSpeechRecognitionPermission() {
-        SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
+    private func requestSpeechRecognitionPermission(completion: @escaping (Bool) -> Void) {
+        SFSpeechRecognizer.requestAuthorization { authStatus in
             DispatchQueue.main.async {
                 switch authStatus {
                 case .authorized:
                     print("✅ Speech recognition authorized")
+                    completion(true)
                 case .denied:
                     print("❌ Speech recognition denied")
-                    self?.errorMessage = "Speech recognition permission denied"
+                    self.errorMessage = "Speech recognition permission denied"
+                    completion(false)
                 case .restricted:
                     print("❌ Speech recognition restricted")
-                    self?.errorMessage = "Speech recognition restricted"
+                    self.errorMessage = "Speech recognition restricted"
+                    completion(false)
                 case .notDetermined:
                     print("❌ Speech recognition not determined")
-                    self?.errorMessage = "Speech recognition permission not determined"
+                    self.errorMessage = "Speech recognition permission not determined"
+                    completion(false)
                 @unknown default:
                     print("❌ Speech recognition unknown error")
-                    self?.errorMessage = "Speech recognition unknown error"
+                    self.errorMessage = "Speech recognition unknown error"
+                    completion(false)
                 }
             }
         }
@@ -51,21 +56,42 @@ class VoiceToTextService: NSObject, ObservableObject {
     /// Convert audio file to text
     func transcribeAudioFile(url: URL, completion: @escaping (Result<String, Error>) -> Void) {
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+            print("❌ Speech recognizer not available")
             completion(.failure(VoiceToTextError.speechRecognizerNotAvailable))
             return
         }
         
-        // Request permissions if not already authorized
-        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
-            requestSpeechRecognitionPermission()
-            completion(.failure(VoiceToTextError.permissionDenied))
-            return
-        }
+        // Handle permission status
+        let authStatus = SFSpeechRecognizer.authorizationStatus()
+        print("🎤 Speech recognition authorization status: \(authStatus.rawValue)")
         
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
+        switch authStatus {
+        case .notDetermined:
+            print("🎤 Requesting speech recognition permission...")
+            requestSpeechRecognitionPermission { [weak self] granted in
+                if granted {
+                    self?.performTranscription(url: url, completion: completion)
+                } else {
+                    completion(.failure(VoiceToTextError.permissionDenied))
+                }
+            }
+            return
+        case .denied, .restricted:
+            print("❌ Speech recognition permission denied or restricted")
+            completion(.failure(VoiceToTextError.permissionDenied))
+            return
+        case .authorized:
+            print("✅ Speech recognition authorized, proceeding with transcription")
+            performTranscription(url: url, completion: completion)
+            return
+        @unknown default:
+            print("❌ Unknown speech recognition authorization status")
             completion(.failure(VoiceToTextError.permissionDenied))
             return
         }
+    }
+    
+    private func performTranscription(url: URL, completion: @escaping (Result<String, Error>) -> Void) {
         
         DispatchQueue.main.async {
             self.isTranscribing = true
@@ -85,7 +111,7 @@ class VoiceToTextService: NSObject, ObservableObject {
         let fileRecognitionRequest = SFSpeechURLRecognitionRequest(url: url)
         fileRecognitionRequest.shouldReportPartialResults = false
         
-        recognitionTask = speechRecognizer.recognitionTask(with: fileRecognitionRequest) { [weak self] result, error in
+        recognitionTask = speechRecognizer?.recognitionTask(with: fileRecognitionRequest) { [weak self] result, error in
             DispatchQueue.main.async {
                 self?.isTranscribing = false
                 
@@ -108,6 +134,7 @@ class VoiceToTextService: NSObject, ObservableObject {
     }
     
     /// Cancel current transcription
+    /// Cancel ongoing transcription
     func cancelTranscription() {
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -115,6 +142,7 @@ class VoiceToTextService: NSObject, ObservableObject {
         
         DispatchQueue.main.async {
             self.isTranscribing = false
+            self.errorMessage = "Transcription cancelled"
         }
     }
 }
