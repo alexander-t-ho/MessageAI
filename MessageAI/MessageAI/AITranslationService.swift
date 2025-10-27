@@ -319,6 +319,5 @@ class AITranslationService: ObservableObject {
     func clearTranslations() {
         translations.removeAll()
         culturalHints.removeAll()
-        smartReplies.removeAll()
     }
 }
