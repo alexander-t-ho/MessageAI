@@ -35,9 +35,6 @@ struct TranslationResult: Codable, Equatable {
     let adjustedText: String?
     let originalLevel: String?
     let changes: [String]?
-    
-    // For smart replies
-    let replies: [SmartReply]?
 }
 
 struct CulturalHint: Codable, Equatable {
@@ -47,11 +44,6 @@ struct CulturalHint: Codable, Equatable {
     let actualMeaning: String
 }
 
-struct SmartReply: Codable, Equatable {
-    let text: String
-    let tone: String
-    let intent: String
-}
 
 // MARK: - Language Support
 
@@ -137,7 +129,6 @@ class AITranslationService: ObservableObject {
     @Published var isTranslating = false
     @Published var translations: [String: TranslationResult] = [:] // messageId -> translation
     @Published var culturalHints: [String: [CulturalHint]] = [:] // messageId -> hints
-    @Published var smartReplies: [SmartReply] = []
     @Published var autoTranslateEnabled = false
     @Published var preferredLanguage: SupportedLanguage = .english
     @Published var autoTranslateUsers: Set<String> = [] // userIds to auto-translate
@@ -234,28 +225,6 @@ class AITranslationService: ObservableObject {
         }
     }
     
-    func generateSmartReplies(for conversation: [MessageData], limit: Int = 5) async {
-        // Build conversation context (last 5 messages)
-        let recentMessages = Array(conversation.suffix(limit))
-        let context = recentMessages.map { msg in
-            "\(msg.senderName): \(msg.content)"
-        }.joined(separator: "\n")
-        
-        do {
-            let result = try await makeAPIRequest(
-                action: "smart_replies",
-                text: "",
-                targetLang: preferredLanguage.rawValue,
-                conversationContext: context
-            )
-            
-            if let replies = result?.replies {
-                smartReplies = replies
-            }
-        } catch {
-            print("Smart replies error: \(error)")
-        }
-    }
     
     // MARK: - Helper Functions
     

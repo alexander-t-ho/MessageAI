@@ -170,27 +170,6 @@ struct LanguagePreferencesView: View {
                     Text("Set the default formality level for translated messages. You can adjust this per message.")
                 }
                 
-                // Smart Replies Section
-                Section {
-                    NavigationLink(destination: SmartReplySettingsView()) {
-                        HStack {
-                            Image(systemName: "wand.and.stars")
-                                .foregroundColor(.purple)
-                            VStack(alignment: .leading) {
-                                Text("Smart Reply Settings")
-                                Text("Configure AI-powered quick replies")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                } header: {
-                    Text("AI Features")
-                }
                 
                 // Language Learning Section
                 Section {
@@ -356,58 +335,6 @@ struct AutoTranslateUsersView: View {
     }
 }
 
-// MARK: - Smart Reply Settings View
-
-struct SmartReplySettingsView: View {
-    @State private var smartRepliesEnabled = UserDefaults.standard.bool(forKey: "smartRepliesEnabled")
-    @State private var replyCount = UserDefaults.standard.integer(forKey: "smartReplyCount")
-    @State private var learnFromStyle = UserDefaults.standard.bool(forKey: "learnFromStyle")
-    @State private var includeTone = UserDefaults.standard.bool(forKey: "includeTone")
-    
-    var body: some View {
-        List {
-            Section {
-                Toggle("Enable Smart Replies", isOn: $smartRepliesEnabled)
-                    .onChange(of: smartRepliesEnabled) { _, newValue in
-                        UserDefaults.standard.set(newValue, forKey: "smartRepliesEnabled")
-                    }
-                
-                if smartRepliesEnabled {
-                    Picker("Number of Suggestions", selection: $replyCount) {
-                        Text("3 replies").tag(3)
-                        Text("5 replies").tag(5)
-                        Text("7 replies").tag(7)
-                    }
-                    .onChange(of: replyCount) { _, newValue in
-                        UserDefaults.standard.set(newValue, forKey: "smartReplyCount")
-                    }
-                }
-            } header: {
-                Text("Smart Reply Options")
-            } footer: {
-                Text("AI will suggest contextually relevant quick replies based on your conversation.")
-            }
-            
-            Section {
-                Toggle("Learn from My Style", isOn: $learnFromStyle)
-                    .onChange(of: learnFromStyle) { _, newValue in
-                        UserDefaults.standard.set(newValue, forKey: "learnFromStyle")
-                    }
-                
-                Toggle("Include Tone Indicators", isOn: $includeTone)
-                    .onChange(of: includeTone) { _, newValue in
-                        UserDefaults.standard.set(newValue, forKey: "includeTone")
-                    }
-            } header: {
-                Text("Personalization")
-            } footer: {
-                Text("Smart replies will adapt to your communication style and show appropriate tone indicators.")
-            }
-        }
-        .navigationTitle("Smart Reply Settings")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
 
 // MARK: - Language Learning View
 

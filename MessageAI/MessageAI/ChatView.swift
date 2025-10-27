@@ -396,16 +396,6 @@ struct ChatView: View {
                 .background(Color(.systemGray6))
             }
             
-            // Smart Reply View - AI-powered quick replies
-            if visibleMessages.count > 2 {
-                SmartReplyView(
-                    messageText: $messageText,
-                    conversation: conversation,
-                    messages: visibleMessages
-                )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-            }
             
             // Voice recording indicator (shown when recording)
             if voiceRecorder.isRecording {
