@@ -1538,25 +1538,36 @@ struct ChatView: View {
     }
     
     private func stopVoiceRecording() {
-        guard voiceRecorder.isRecording else { return }
+        guard voiceRecorder.isRecording else { 
+            print("⚠️ No recording in progress")
+            return 
+        }
+        
+        print("🎤 Stopping voice recording...")
         
         let duration = voiceRecorder.recordingDuration
         
-        if let audioURL = voiceRecorder.stopRecording() {
-            // Check minimum duration (1 second)
-            if duration >= 1.0 {
-                print("✅ Voice message recorded: \(String(format: "%.1f", duration))s")
-                recordedVoiceURL = audioURL
-                recordedVoiceDuration = duration
-                
-                print("📁 Voice file saved at: \(audioURL.path)")
-                print("🎤 Sending voice message for transcription")
-                
-                // Send the voice message for transcription instead of preview mode
-                sendVoiceMessage(audioURL: audioURL, duration: duration)
+        // Use a safer approach to stop recording
+        DispatchQueue.main.async {
+            if let audioURL = self.voiceRecorder.stopRecording() {
+                // Check minimum duration (1 second)
+                if duration >= 1.0 {
+                    print("✅ Voice message recorded: \(String(format: "%.1f", duration))s")
+                    self.recordedVoiceURL = audioURL
+                    self.recordedVoiceDuration = duration
+                    
+                    print("📁 Voice file saved at: \(audioURL.path)")
+                    print("🎤 Sending voice message for transcription")
+                    
+                    // Send the voice message for transcription instead of preview mode
+                    self.sendVoiceMessage(audioURL: audioURL, duration: duration)
+                } else {
+                    print("⚠️ Recording too short (< 1s), cancelling")
+                    self.voiceRecorder.cancelRecording()
+                }
             } else {
-                print("⚠️ Recording too short (< 1s), cancelling")
-                voiceRecorder.cancelRecording()
+                print("❌ Failed to stop recording - no audio file returned")
+                self.voiceRecorder.cancelRecording()
             }
         }
     }

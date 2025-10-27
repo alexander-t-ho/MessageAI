@@ -145,16 +145,17 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
     func stopRecording() -> URL? {
         guard isRecording else { return nil }
         
-        // Stop recording and wait for delegate callback
-        audioRecorder?.stop()
+        print("🎤 Stopping recording...")
+        
+        // Stop timers first
         recordingTimer?.invalidate()
         levelTimer?.invalidate()
         recordingTimer = nil
         levelTimer = nil
-        isRecording = false
         
-        // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false)
+        // Stop recording
+        audioRecorder?.stop()
+        isRecording = false
         
         let url = currentRecordingURL
         let duration = recordingDuration
@@ -162,10 +163,19 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
         print("🎤 Stopped recording - Duration: \(String(format: "%.1f", duration))s")
         print("📁 File: \(url?.lastPathComponent ?? "unknown")")
         
-        // Don't reset currentRecordingURL yet - wait for delegate callback
-        // currentRecordingURL = nil
+        // Reset state
         recordingDuration = 0
         audioLevel = 0
+        
+        // Deactivate audio session on background queue to prevent crashes
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false)
+                print("✅ Audio session deactivated successfully")
+            } catch {
+                print("❌ Failed to deactivate audio session: \(error)")
+            }
+        }
         
         return url
     }
@@ -173,11 +183,16 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
     func cancelRecording() {
         guard isRecording else { return }
         
-        audioRecorder?.stop()
+        print("🗑️ Cancelling recording...")
+        
+        // Stop timers first
         recordingTimer?.invalidate()
         levelTimer?.invalidate()
         recordingTimer = nil
         levelTimer = nil
+        
+        // Stop recording
+        audioRecorder?.stop()
         isRecording = false
         
         // Delete the recording file
@@ -190,7 +205,15 @@ class VoiceMessageRecorder: NSObject, ObservableObject {
         recordingDuration = 0
         audioLevel = 0
         
-        try? AVAudioSession.sharedInstance().setActive(false)
+        // Deactivate audio session on background queue to prevent crashes
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false)
+                print("✅ Audio session deactivated successfully")
+            } catch {
+                print("❌ Failed to deactivate audio session: \(error)")
+            }
+        }
     }
     
     // MARK: - Private Helpers
