@@ -15,11 +15,14 @@ class VoiceToTextService: NSObject, ObservableObject {
     @Published var transcribedText = ""
     @Published var errorMessage: String?
     
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private let speechRecognizer: SFSpeechRecognizer?
     private var recognitionTask: SFSpeechRecognitionTask?
     
     override init() {
         super.init()
+        // Initialize speech recognizer with proper locale
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        print("🎤 Speech recognizer initialized: \(speechRecognizer != nil)")
         // Don't request permissions immediately - wait until first use
     }
     
@@ -100,7 +103,31 @@ class VoiceToTextService: NSObject, ObservableObject {
         guard FileManager.default.fileExists(atPath: url.path) else {
             DispatchQueue.main.async {
                 self.isTranscribing = false
-                self.errorMessage = "Audio file not found"
+                self.errorMessage = "Audio file not found at path: \(url.path)"
+                completion(.failure(VoiceToTextError.noResult))
+            }
+            return
+        }
+        
+        // Check file size to ensure it's not empty
+        do {
+            let fileAttributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            let fileSize = fileAttributes[.size] as? Int64 ?? 0
+            print("📁 Audio file size: \(fileSize) bytes")
+            
+            if fileSize == 0 {
+                DispatchQueue.main.async {
+                    self.isTranscribing = false
+                    self.errorMessage = "Audio file is empty"
+                    completion(.failure(VoiceToTextError.noResult))
+                }
+                return
+            }
+        } catch {
+            print("❌ Failed to get file attributes: \(error)")
+            DispatchQueue.main.async {
+                self.isTranscribing = false
+                self.errorMessage = "Failed to validate audio file"
                 completion(.failure(VoiceToTextError.noResult))
             }
             return

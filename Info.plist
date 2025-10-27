@@ -54,6 +54,8 @@
 	<string>We need access to your camera to take photos for chats.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone to record voice messages.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app uses speech recognition to convert your voice messages into text for better accessibility and search.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
