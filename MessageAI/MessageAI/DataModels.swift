@@ -45,11 +45,18 @@ final class MessageData {
     var emphasizedBy: [String] // Array of user IDs who emphasized this message
     
     // Voice message fields
-    var messageType: String? // "text" or "voice"
+    var messageType: String? // "text", "voice", or "image"
     var audioUrl: String? // S3 URL or local file path
     var audioDuration: Double? // Duration in seconds
     var transcript: String? // Voice-to-text transcription
     var isTranscribing: Bool = false // True while transcribing
+    
+    // Image message fields
+    var imageUrl: String? // S3 URL for uploaded image
+    var imageWidth: Double? // Original image width
+    var imageHeight: Double? // Original image height
+    var imageThumbnailUrl: String? // S3 URL for thumbnail
+    var imageCaption: String? // Optional caption text
     
     init(
         id: String = UUID().uuidString,
@@ -76,7 +83,12 @@ final class MessageData {
         audioUrl: String? = nil,
         audioDuration: Double? = nil,
         transcript: String? = nil,
-        isTranscribing: Bool = false
+        isTranscribing: Bool = false,
+        imageUrl: String? = nil,
+        imageWidth: Double? = nil,
+        imageHeight: Double? = nil,
+        imageThumbnailUrl: String? = nil,
+        imageCaption: String? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -104,6 +116,11 @@ final class MessageData {
         self.audioDuration = audioDuration
         self.transcript = transcript
         self.isTranscribing = isTranscribing
+        self.imageUrl = imageUrl
+        self.imageWidth = imageWidth
+        self.imageHeight = imageHeight
+        self.imageThumbnailUrl = imageThumbnailUrl
+        self.imageCaption = imageCaption
     }
     
     // Helper method to check if message was sent by a specific user

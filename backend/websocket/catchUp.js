@@ -85,6 +85,11 @@ exports.handler = async (event) => {
       console.log(`   audioDuration: ${m.audioDuration}`);
       console.log(`   transcript: ${m.transcript}`);
       console.log(`   isTranscribing: ${m.isTranscribing}`);
+      console.log(`   imageUrl: ${m.imageUrl}`);
+      console.log(`   imageWidth: ${m.imageWidth}`);
+      console.log(`   imageHeight: ${m.imageHeight}`);
+      console.log(`   imageThumbnailUrl: ${m.imageThumbnailUrl}`);
+      console.log(`   imageCaption: ${m.imageCaption}`);
       
       // Log voice message details if present
       if (m.messageType === 'voice') {
@@ -92,6 +97,15 @@ exports.handler = async (event) => {
         console.log(`   Audio URL: ${m.audioUrl || 'nil'}`);
         console.log(`   Duration: ${m.audioDuration || 0}s`);
         console.log(`   Transcript: ${m.transcript || 'none'}`);
+      }
+      
+      // Log image message details if present
+      if (m.messageType === 'image') {
+        console.log(`🖼️ Image message being delivered via catchUp:`);
+        console.log(`   Image URL: ${m.imageUrl || 'nil'}`);
+        console.log(`   Dimensions: ${m.imageWidth}x${m.imageHeight}`);
+        console.log(`   Thumbnail URL: ${m.imageThumbnailUrl || 'nil'}`);
+        console.log(`   Caption: ${m.imageCaption || 'none'}`);
       }
       
       const messagePayload = {
@@ -115,6 +129,12 @@ exports.handler = async (event) => {
           audioDuration: m.audioDuration || null,
           transcript: m.transcript || null,
           isTranscribing: m.isTranscribing || false,
+          // Image message fields
+          imageUrl: m.imageUrl || null,
+          imageWidth: m.imageWidth || null,
+          imageHeight: m.imageHeight || null,
+          imageThumbnailUrl: m.imageThumbnailUrl || null,
+          imageCaption: m.imageCaption || null,
         },
       };
       

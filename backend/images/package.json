@@ -1,0 +1,14 @@
+{
+  "name": "messageai-images",
+  "version": "1.0.0",
+  "description": "Image upload Lambda functions for MessageAI",
+  "main": "generateImageUploadUrl.js",
+  "scripts": {
+    "deploy": "./deploy-image-lambdas.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.400.0",
+    "@aws-sdk/s3-request-presigner": "^3.400.0"
+  }
+}
+

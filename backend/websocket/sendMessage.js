@@ -57,7 +57,13 @@ exports.handler = async (event) => {
         audioUrl,
         audioDuration,
         transcript,
-        isTranscribing
+        isTranscribing,
+        // Image message fields
+        imageUrl,
+        imageWidth,
+        imageHeight,
+        imageThumbnailUrl,
+        imageCaption
     } = messageData;
     
     // Log voice message fields if present
@@ -67,6 +73,15 @@ exports.handler = async (event) => {
         console.log(`   Duration: ${audioDuration}s`);
         console.log(`   Transcript: ${transcript || 'none'}`);
         console.log(`   Is Transcribing: ${isTranscribing}`);
+    }
+    
+    // Log image message fields if present
+    if (messageType === 'image') {
+        console.log('🖼️ Image message detected:');
+        console.log(`   Image URL: ${imageUrl}`);
+        console.log(`   Dimensions: ${imageWidth}x${imageHeight}`);
+        console.log(`   Thumbnail URL: ${imageThumbnailUrl}`);
+        console.log(`   Caption: ${imageCaption || 'none'}`);
     }
     
     // Validate required fields
@@ -117,7 +132,13 @@ exports.handler = async (event) => {
                         audioUrl: audioUrl || null,
                         audioDuration: audioDuration || null,
                         transcript: transcript || null,
-                        isTranscribing: isTranscribing || false
+                        isTranscribing: isTranscribing || false,
+                        // Image message fields
+                        imageUrl: imageUrl || null,
+                        imageWidth: imageWidth || null,
+                        imageHeight: imageHeight || null,
+                        imageThumbnailUrl: imageThumbnailUrl || null,
+                        imageCaption: imageCaption || null
                     }
                 }));
             });
@@ -145,7 +166,13 @@ exports.handler = async (event) => {
                     audioUrl: audioUrl || null,
                     audioDuration: audioDuration || null,
                     transcript: transcript || null,
-                    isTranscribing: isTranscribing || false
+                    isTranscribing: isTranscribing || false,
+                    // Image message fields
+                    imageUrl: imageUrl || null,
+                    imageWidth: imageWidth || null,
+                    imageHeight: imageHeight || null,
+                    imageThumbnailUrl: imageThumbnailUrl || null,
+                    imageCaption: imageCaption || null
                 }
             }));
             console.log(`✅ Direct message saved to DynamoDB: ${messageId}`);
@@ -199,7 +226,13 @@ exports.handler = async (event) => {
                                 audioUrl: audioUrl || null,
                                 audioDuration: audioDuration || null,
                                 transcript: transcript || null,
-                                isTranscribing: isTranscribing || false
+                                isTranscribing: isTranscribing || false,
+                                // Image message fields
+                                imageUrl: imageUrl || null,
+                                imageWidth: imageWidth || null,
+                                imageHeight: imageHeight || null,
+                                imageThumbnailUrl: imageThumbnailUrl || null,
+                                imageCaption: imageCaption || null
                             }
                         }))
                     }));

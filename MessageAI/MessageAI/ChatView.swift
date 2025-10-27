@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 struct ChatView: View {
     let conversation: ConversationData
@@ -39,6 +40,13 @@ struct ChatView: View {
     @State private var userHasManuallyScrolledUp: Bool = false // disables auto-scroll until back at bottom
     @State private var scrollToBottomTick: Int = 0 // trigger to request bottom scroll inside ScrollViewReader
     @State private var typingTimer: Timer? = nil // Timer for typing indicator timeout
+    
+    // Image picker state
+    @State private var showImagePicker = false
+    @State private var showImageActionSheet = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
+    @State private var isUploadingImage = false
     @State private var lastTypingTime: Date = Date() // Track last typing activity
     @State private var typingDotsAnimation: Bool = false // Animation trigger for typing dots
     @State private var showGroupDetails = false
@@ -513,6 +521,16 @@ struct ChatView: View {
             } else {
                 // Input bar (normal state)
                 HStack(spacing: 12) {
+                    // Photo/Camera button
+                    Button(action: {
+                        showImageActionSheet = true
+                    }) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.blue)
+                    }
+                    .disabled(isUploadingImage)
+                    
                     TextField("Message", text: $messageText, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .lineLimit(1...6)
@@ -691,6 +709,40 @@ struct ChatView: View {
                 )
             }
         }
+        .actionSheet(isPresented: $showImageActionSheet) {
+            ActionSheet(
+                title: Text("Select Image"),
+                buttons: [
+                    .default(Text("Photo Library")) {
+                        showImagePicker = true
+                    },
+                    .default(Text("Take Photo")) {
+                        showCamera = true
+                    },
+                    .cancel()
+                ]
+            )
+        }
+        .imagePicker(
+            isPresented: $showImagePicker,
+            pickerType: .photoLibrary,
+            onImageSelected: { image in
+                if let image = image {
+                    selectedImage = image
+                    uploadImage(image)
+                }
+            }
+        )
+        .imagePicker(
+            isPresented: $showCamera,
+            pickerType: .camera,
+            onImageSelected: { image in
+                if let image = image {
+                    selectedImage = image
+                    uploadImage(image)
+                }
+            }
+        )
         .onChange(of: webSocketService.receivedMessages.count) { oldCount, newCount in
             // New message received via WebSocket
             if newCount > oldCount, let newMessage = webSocketService.receivedMessages.last {
@@ -1879,7 +1931,7 @@ struct MessageBubble: View {
                     
                     // Message content with emphasis overlay
                     ZStack(alignment: .topTrailing) {
-                        // Voice message or text message
+                        // Voice message, image message, or text message
                         if message.messageType == "voice" {
                             VoiceMessageBubble(
                                 message: message,
@@ -1890,6 +1942,17 @@ struct MessageBubble: View {
                                 print("🎤 RENDERING VoiceMessageBubble for message: \(message.id)")
                                 print("🎤 Message type: \(message.messageType ?? "nil")")
                                 print("🎤 Audio URL: \(message.audioUrl ?? "nil")")
+                            }
+                        } else if message.messageType == "image" {
+                            ImageMessageBubble(
+                                message: message,
+                                isFromCurrentUser: isFromCurrentUser,
+                                messageBubbleColor: messageBubbleColor
+                            )
+                            .onAppear {
+                                print("🖼️ RENDERING ImageMessageBubble for message: \(message.id)")
+                                print("🖼️ Message type: \(message.messageType ?? "nil")")
+                                print("🖼️ Image URL: \(message.imageUrl ?? "nil")")
                             }
                         } else {
                             Text(message.content)
@@ -2606,6 +2669,167 @@ struct VoicePlaybackWaveformView: View {
         let height = baseHeight + (maxHeight - baseHeight) * abs(waveOffset) * randomFactor
         
         return max(baseHeight, height)
+    }
+}
+
+// MARK: - Image Message Bubble Component
+struct ImageMessageBubble: View {
+    let message: MessageData
+    let isFromCurrentUser: Bool
+    let messageBubbleColor: Color
+    
+    @State private var showImageViewer = false
+    @State private var isLoading = true
+    @State private var hasError = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Image display
+            if let imageUrl = message.imageUrl {
+                Button(action: { showImageViewer = true }) {
+                    AsyncImage(url: URL(string: imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 250, maxHeight: 300)
+                            .cornerRadius(12)
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 250, height: 200)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                            )
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .onAppear {
+                    isLoading = false
+                }
+            } else {
+                // Fallback for missing image URL
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 250, height: 200)
+                    .overlay(
+                        VStack {
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                                .foregroundColor(.gray)
+                            Text("Image not available")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    )
+            }
+            
+            // Caption (if any)
+            if let caption = message.imageCaption, !caption.isEmpty {
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundColor(isFromCurrentUser ? .white : .primary)
+                    .padding(.horizontal, 4)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isFromCurrentUser ? messageBubbleColor : Color(.systemGray5))
+        .cornerRadius(20)
+        .sheet(isPresented: $showImageViewer) {
+            if let imageUrl = message.imageUrl {
+                ImageViewerView(imageUrl: imageUrl)
+            }
+        }
+    }
+}
+
+// MARK: - Image Upload Functions
+    
+    private func uploadImage(_ image: UIImage) {
+        guard let currentUserId = authViewModel.currentUser?.id else {
+            print("❌ No current user ID for image upload")
+            return
+        }
+        
+        isUploadingImage = true
+        
+        Task {
+            do {
+                // Compress the image
+                let (compressedData, width, height) = ImageCompressionService.shared.compressImage(image)
+                guard let imageData = compressedData else {
+                    throw S3ImageError.failedToReadFile
+                }
+                
+                // Generate thumbnail
+                let thumbnailData = ImageCompressionService.shared.generateThumbnail(image)
+                
+                // Generate message ID
+                let messageId = UUID().uuidString
+                
+                // Upload to S3
+                let s3Storage = S3ImageStorage.shared
+                let (imageURL, thumbnailURL) = try await s3Storage.uploadImageWithThumbnail(
+                    imageData: imageData,
+                    thumbnailData: thumbnailData ?? imageData,
+                    userId: currentUserId,
+                    messageId: messageId
+                )
+                
+                // Create message locally
+                let message = MessageData(
+                    conversationId: conversation.id,
+                    senderId: currentUserId,
+                    senderName: currentUserName,
+                    content: "", // Empty content for image-only messages
+                    timestamp: Date(),
+                    status: "sending",
+                    messageType: "image",
+                    imageUrl: imageURL,
+                    imageWidth: width,
+                    imageHeight: height,
+                    imageThumbnailUrl: thumbnailURL
+                )
+                
+                // Save to local database
+                try modelContext.save()
+                
+                // Send via WebSocket
+                await sendImageMessage(message)
+                
+                DispatchQueue.main.async {
+                    self.isUploadingImage = false
+                    self.selectedImage = nil
+                }
+                
+            } catch {
+                print("❌ Image upload failed: \(error)")
+                DispatchQueue.main.async {
+                    self.isUploadingImage = false
+                    self.selectedImage = nil
+                }
+            }
+        }
+    }
+    
+    private func sendImageMessage(_ message: MessageData) async {
+        let messageData: [String: Any] = [
+            "id": message.id,
+            "conversationId": message.conversationId,
+            "senderId": message.senderId,
+            "senderName": message.senderName,
+            "content": message.content,
+            "timestamp": ISO8601DateFormatter().string(from: message.timestamp),
+            "messageType": message.messageType ?? "text",
+            "imageUrl": message.imageUrl ?? "",
+            "imageWidth": message.imageWidth ?? 0,
+            "imageHeight": message.imageHeight ?? 0,
+            "imageThumbnailUrl": message.imageThumbnailUrl ?? "",
+            "imageCaption": message.imageCaption ?? ""
+        ]
+        
+        await webSocketService.sendMessage(messageData)
     }
 }
 
